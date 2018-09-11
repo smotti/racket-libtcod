@@ -70,7 +70,7 @@
 
 ; NOTE: That we have to use type Any for fov here, because the type checker would
 ;       fail even if the given type is the expected type.
-(struct game-state ([a-player : GameObject]
+(struct game-state ([player : GameObject]
                     [exit : Boolean]
                     [objects : (Listof GameObject)]
                     [map : (Array Tile)]
@@ -118,16 +118,16 @@
   ;(log-debug "Draw tiles")
   (define (is-wall? t) (tile-block-sight t))
 
-  (define a-player (game-state-a-player state))
-  (define a-player-x (position-x (game-object-position a-player)))
-  (define a-player-y (position-y (game-object-position a-player)))
+  (define player (game-state-player state))
+  (define player-x (~> player game-object-position position-x))
+  (define player-y (~> player game-object-position position-y))
 
   ;(lob-debug "Compute FoV")
   (define fov-map (game-state-fov state))
   (define new-state
     (cond
       [(game-state-fov-recompute state)
-       (map-compute-fov fov-map a-player-x a-player-y TORCH-RADIUS FOV-LIGHT-WALLS FOV-ALGO)
+       (map-compute-fov fov-map player-x player-y TORCH-RADIUS FOV-LIGHT-WALLS FOV-ALGO)
        (for ([y MAP-HEIGHT])
          (for ([x MAP-WIDTH])
            (let ([is-visible? : Boolean (map-is-in-fov fov-map x y)]
@@ -152,7 +152,7 @@
 
   ;(log-debug "Draw game objects")
   (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
-            (cons a-player (game-state-objects new-state)))
+            (cons player (game-state-objects new-state)))
 
   ;(log-debug "Blit drawing offscreen-console to root-console")
   (console-blit offscreen-console 0 0 SCREEN-WIDTH SCREEN-HEIGHT console-root 0 0)
@@ -167,53 +167,63 @@
                        #\.
                        color-white color-dark-blue))
 
-(: move (-> Integer Integer Position GameState Position))
-(define (move dx dy current-posn state)
+(: move (-> GameState Integer Integer GameState))
+(define (move state dx dy)
+  (define player (game-state-player state))
+  (define current-posn (game-object-position player))
   (define-values (x y)
     (values (+ (position-x current-posn) dx)
             (+ (position-y current-posn) dy)))
 
-  (if (not (is-blocked? x y (game-state-map state) (game-state-objects state)))
-   (block
-    (define new-posn (position x y))
-    (log-debug (format "New object position: ~s" new-posn))
-    new-posn)
-   current-posn))
-
-(: move-or-attack (-> Integer Integer Position GameState (Values Position GameState)))
-(define (move-or-attack dx dy current-posn state)
-  ; The position the object is moving to/attacking
-  (define-values (x y)
-    (values (+ (position-x current-posn) dx)
-            (+ (position-y current-posn) dy)))
-
-  (define target (for/or : (U GameObject Boolean) ([o : GameObject (game-state-objects state)])
-                   (define obj-posn (game-object-position o))
-                   (if (and (= x (position-x obj-posn))
-                            (= y (position-y obj-posn)))
-                       o
-                       #f)))
   (cond
-    [(game-object? target)
-     (log-debug "The ~s laughs at your puny efforts to attack him!"
-                (game-object-name target))
-     (values current-posn state)]
-    [else
-     (values (move dx dy current-posn state)
-             (struct-copy game-state state [fov-recompute #t]))]))
+    [(not (is-blocked? x y (game-state-map state) (game-state-objects state)))
+     (define new-posn (position x y))
+     (log-debug (format "New object position: ~s" new-posn))
 
-(: player-move-or-attack (-> Position GameState (Values Position GameState)))
-(define (player-move-or-attack current-posn state)
+     (define new-player (struct-copy game-object player [position new-posn]))
+     (struct-copy game-state state [player new-player] [fov-recompute #t])]
+    [else state]))
+
+(: get-move-deltas (-> (Values Integer Integer)))
+(define (get-move-deltas)
   (cond
     [(console-is-key-pressed 'UP)
-     (move-or-attack 0 -1 current-posn state)]
+     (values 0 -1)]
     [(console-is-key-pressed 'DOWN)
-     (move-or-attack 0 1 current-posn state)]
+     (values 0 1)]
     [(console-is-key-pressed 'LEFT)
-     (move-or-attack -1 0 current-posn state)]
+     (values -1 0)]
     [(console-is-key-pressed 'RIGHT)
-     (move-or-attack 1 0 current-posn state)]
-    [else (values current-posn state)]))
+     (values 1 0)]
+    [else (values 0 0)]))
+
+(: attack? (-> GameState Integer Integer (U Boolean GameObject)))
+(define (attack? state dx dy)
+  (define current-posn (~> state game-state-player game-object-position))
+  (define-values (x y)
+    (values (+ (position-x current-posn) dx)
+            (+ (position-y current-posn) dy)))
+
+  (for/or : (U GameObject Boolean) ([o : GameObject (game-state-objects state)])
+    (define obj-posn (game-object-position o))
+    (if (and (= x (position-x obj-posn))
+             (= y (position-y obj-posn)))
+        o
+        #f)))
+
+(: attack (-> GameState GameObject GameState))
+(define (attack state target)
+  (log-debug "The ~s laughs at your puny efforts to attack him!"
+             (game-object-name target))
+  state)
+
+(: player-move-or-attack (-> GameState GameState))
+(define (player-move-or-attack state)
+  (define-values (dx dy) (get-move-deltas))
+  (define target (attack? state dx dy))
+  (if (game-object? target)
+      (attack state target)
+      (move state dx dy)))
 
 (: handle-keys (-> GameState GameState))
 (define (handle-keys state)
@@ -229,45 +239,37 @@
      (struct-copy game-state state [exit #t] [action 'exit])]
     [(and (eq? 'playing (game-state-mode state))
           (member vk '(UP DOWN LEFT RIGHT)))
-     (define current-posn (game-object-position (game-state-a-player state)))
-     (define-values (new-player-posn new-state)
-       (player-move-or-attack current-posn state))
-     (define new-player
-       (struct-copy game-object default-player [position new-player-posn]))
-
-     (struct-copy game-state new-state
-                  [a-player new-player]
-                  [action 'turn])]
+     (struct-copy game-state (player-move-or-attack state) [action 'turn])]
     [else (struct-copy game-state state [action 'no-turn])]))
 
 (: clear-object-positions (-> GameState GameState))
 (define (clear-object-positions state)
   ;(log-debug "Clear old position of objects")
-  (define a-player (game-state-a-player state))
+  (define player (game-state-player state))
   (for-each (lambda ([obj : GameObject])
               (clear (game-object-position obj) offscreen-console))
-            (cons a-player (game-state-objects state)))
+            (cons player (game-state-objects state)))
 
   state)
 
 (: game-loop (-> GameState Void))
 (define (game-loop state)
-  (let ([closed? (console-is-window-closed)])
-    (unless closed?
-      (define new-state
-        (~> state
-            (render-all offscreen-console)
-            (clear-object-positions)
-            (handle-keys)))
+  (define closed? (console-is-window-closed))
+  (unless closed?
+    (define new-state
+      (~> state
+          (render-all offscreen-console)
+          (clear-object-positions)
+          (handle-keys)))
+    
+;      (when (and (eq? 'playing (game-state-mode new-state))
+;                 (eq? 'turn (game-state-action new-state)))
+;        (for ([o (game-state-objects new-state)])
+;          (log-debug "The ~s growls!" (game-object-name o))))
 
-      (when (and (eq? 'playing (game-state-mode new-state))
-                 (eq? 'turn (game-state-action new-state)))
-        (for ([o (game-state-objects new-state)])
-          (log-debug "The ~s growls!" (game-object-name o))))
-
-      (game-loop (if (game-state-exit new-state)
-                     (exit)
-                     new-state)))))
+    (game-loop (if (game-state-exit new-state)
+                   (exit)
+                   new-state))))
 
 (log-debug "Set window title")
 (console-set-window-title "Testerlie")
