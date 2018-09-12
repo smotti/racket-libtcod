@@ -2,6 +2,7 @@
 
 (require math/array
          racket/block
+         racket/format
          threading
          typed/racket/class
 
@@ -21,6 +22,7 @@
   [console-is-key-pressed (-> Symbol Boolean)]
   [console-is-window-closed (-> Boolean)]
   [console-new (-> Integer Integer Console)]
+  [console-print-ex (-> Console Integer Integer Symbol Symbol String Void)]
   [console-put-char (-> Console Integer Integer Char Symbol Void)]
   [console-put-char-ex (-> Console Integer Integer Char Color Color Void)]
   [console-root Integer]
@@ -159,8 +161,19 @@
   (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
             (cons player (game-state-objects new-state)))
 
+  (define player-fighter (game-object-fighter player))
+  (console-set-default-foreground con color-white)
+  (console-print-ex con
+                    1
+                    (- SCREEN-HEIGHT 2)
+                    'BKGND_NONE
+                    'LEFT
+                    (format "HP : ~v/~v"
+                            (fighter-hp (cast player-fighter Fighter))
+                            (fighter-max-hp (cast player-fighter Fighter))))
+
   ;(log-debug "Blit drawing offscreen-console to root-console")
-  (console-blit offscreen-console 0 0 SCREEN-WIDTH SCREEN-HEIGHT console-root 0 0)
+  (console-blit con 0 0 SCREEN-WIDTH SCREEN-HEIGHT console-root 0 0)
   (console-flush)
 
   new-state)

@@ -9,6 +9,7 @@
          console-is-key-pressed
          console-is-window-closed
          console-new
+         console-print-ex
          console-put-char
          console-put-char-ex
          console-root
@@ -133,6 +134,7 @@
                       [rmeta _bool]
                       [shift _bool]))
 
+(define _alignment (_enum '(LEFT RIGHT CENTER)))
 
 (define _bkgnd_flag (_enum '(BKGND_NONE BKGND_SET)))
 
@@ -164,6 +166,10 @@
 (define-tcod console-set-default-foreground
   (_fun _console _color -> _void)
   #:c-id TCOD_console_set_default_foreground)
+
+(define-tcod console-print-ex
+  (_fun _console _int _int _bkgnd_flag _alignment _string -> _void)
+  #:c-id TCOD_console_print_ex)
 
 (define-tcod console-put-char
   (_fun _console _int _int _char _bkgnd_flag -> _void)
