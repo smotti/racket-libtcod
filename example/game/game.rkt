@@ -275,14 +275,12 @@
 (define (take-damage obj damage)
   (define a-fighter (game-object-fighter obj))
   ; This is a good place where lenses would make things better
-  (cond [(> damage 0)
-         (struct-copy game-object
-                      obj
-                      [fighter (struct-copy fighter
-                                            a-fighter
-                                            [hp (- (fighter-hp a-fighter)
-                                                   damage)])])]
-        [else obj]))
+  (struct-copy game-object
+               obj
+               [fighter (struct-copy fighter
+                                     a-fighter
+                                     [hp (- (fighter-hp a-fighter)
+                                            damage)])]))
 
 ; returns the attacked target
 (: attack (-> GameState GameObject GameObject GameObject))
@@ -297,6 +295,8 @@
                     (game-object-name attacker)
                     (game-object-name target)
                     damage)
+         (when (eq? 'player (game-object-type target))
+           (log-debug "DAMAGED PLAYER: ~a" (take-damage target damage)))
          (take-damage target damage)]
         [else
          (log-debug "~s attacks ~s but is has no effect!"
@@ -355,19 +355,19 @@
 (define (objects-take-turn state)
   (cond [(and (eq? 'playing (game-state-mode state))
               (eq? 'turn (game-state-action state)))
-         (define-values (new-objs new-player)
+         (define-values (new-state new-objs)
            (for/fold
-               ([latest-objs : (Listof GameObject) '()]
-                [latest-player : GameObject (game-state-player state)])
+               ([latest-state : GameState state]
+                [latest-objs : (Listof GameObject) '()])
                ([current-obj (game-state-objects state)])
              (cond [(null? (game-object-ai current-obj))
-                    (values (cons current-obj latest-objs) latest-player)]
+                    (values state (cons current-obj latest-objs))]
                    [else
                     (define-values (latest-obj latest-player)
-                      (basic-monster-take-turn state current-obj))
-                    (values (cons latest-obj latest-objs)
-                            latest-player)])))
-         (struct-copy game-state state [player new-player] [objects new-objs])]
+                      (basic-monster-take-turn latest-state current-obj))
+                    (values (struct-copy game-state state [player latest-player])
+                            (cons latest-obj latest-objs))])))
+         (struct-copy game-state new-state [objects new-objs])]
         [else state]))
 
 (: game-loop (-> GameState Void))
