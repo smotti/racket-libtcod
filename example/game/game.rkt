@@ -7,7 +7,7 @@
 
          "../../color.rkt"
          "game-types.rkt"
-         "map-generator.rkt")
+         "map.rkt")
 
 (require/typed racket/base
   [(vector->values map-indexes) (-> Any (Values Integer Integer))])
