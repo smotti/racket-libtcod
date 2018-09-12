@@ -84,7 +84,12 @@
                                          #\@
                                          color-white
                                          'player
-                                         "namra"))
+                                         "namra"
+                                         #:fighter (make-fighter #:hp 30
+                                                                 #:defense 2
+                                                                 #:power 5)))
+
+(log-debug "Default player: ~a" default-player)
 
 (define root-console (console-init-root SCREEN-WIDTH
                                    SCREEN-HEIGHT
@@ -160,29 +165,71 @@
 
   new-state)
 
-(: clear (-> Position Console Void))
-(define (clear posn con)
-  (console-put-char-ex con
-                       (position-x posn) (position-y posn)
-                       #\.
-                       color-white color-dark-blue))
+(: clear (-> Position Console FovMap Void))
+(define (clear posn con fov-map)
+  (when (map-is-in-fov fov-map (position-x posn) (position-y posn))
+    (console-put-char con
+                      (position-x posn) (position-y posn)
+                      #\.
+                      'BKGND_NONE)))
 
-(: move (-> GameState Integer Integer GameState))
-(define (move state dx dy)
+(: distance-to (-> GameObject GameObject Real))
+(define (distance-to obj other)
+  (define obj-posn (game-object-position obj))
+  (define other-posn (game-object-position other))
+  (define dx (- (position-x other-posn) (position-x obj-posn)))
+  (define dy (- (position-y other-posn) (position-y obj-posn)))
+  (sqrt (+ (sqr dx) (sqr dy))))
+
+(: move-towards (-> GameState GameObject Integer Integer GameObject))
+(define (move-towards state obj target-x target-y)
+  (define posn (game-object-position obj))
+
+  ; vector from obj to target and distance
+  (define dx (- target-x (position-x posn)))
+  (define dy (- target-y (position-y posn)))
+  (define distance (sqrt (+ (sqr dx) (sqr dy))))
+
+  ; normalize vector to length of 1 (preserving direction)
+  ; rounding is done to get an integer that is restricted to the map grid
+  (move state
+        obj
+        (~> dx (/ distance) (cast Real) exact-round)
+        (~> dy (/ distance) (cast Real) exact-round)))
+
+; Produces two new values for the given object and the player
+(: basic-monster-take-turn (-> GameState GameObject (Values GameObject GameObject)))
+(define (basic-monster-take-turn state obj)
+  (define obj-posn (game-object-position obj))
   (define player (game-state-player state))
-  (define current-posn (game-object-position player))
+  (define player-posn (game-object-position player))
+
+  (if (not (map-is-in-fov (game-state-fov state)
+                          (position-x obj-posn)
+                          (position-y obj-posn)))
+      (values obj player)
+      (cond [(>= (distance-to obj player) 2)
+             (values (move-towards state
+                                   obj
+                                   (position-x player-posn)
+                                   (position-y player-posn))
+                     player)]
+            [else
+             (values obj (attack state obj player))])))
+
+(: move (-> GameState GameObject Integer Integer GameObject))
+(define (move state obj dx dy)
+  (define current-posn (game-object-position obj))
   (define-values (x y)
     (values (+ (position-x current-posn) dx)
             (+ (position-y current-posn) dy)))
 
-  (cond
-    [(not (is-blocked? x y (game-state-map state) (game-state-objects state)))
-     (define new-posn (position x y))
-     (log-debug (format "New object position: ~s" new-posn))
-
-     (define new-player (struct-copy game-object player [position new-posn]))
-     (struct-copy game-state state [player new-player] [fov-recompute #t])]
-    [else state]))
+  (cond [(is-blocked? x y (game-state-map state) (game-state-objects state))
+         obj]
+        [else
+         (define new-posn (position x y))
+         ;(log-debug (format "New object position: ~s" new-posn))
+         (struct-copy game-object obj [position new-posn])]))
 
 (: get-move-deltas (-> (Values Integer Integer)))
 (define (get-move-deltas)
@@ -211,24 +258,60 @@
         o
         #f)))
 
-(: attack (-> GameState GameObject GameState))
-(define (attack state target)
-  (log-debug "The ~s laughs at your puny efforts to attack him!"
-             (game-object-name target))
-  state)
+(: take-damage (-> GameObject Integer GameObject))
+(define (take-damage obj damage)
+  (define a-fighter (game-object-fighter obj))
+  ; This is a good place where lenses would make things better
+  (cond [(> damage 0)
+         (struct-copy game-object
+                      obj
+                      [fighter (struct-copy fighter
+                                            a-fighter
+                                            [hp (- (fighter-hp a-fighter)
+                                                   damage)])])]
+        [else obj]))
 
-(: player-move-or-attack (-> GameState GameState))
-(define (player-move-or-attack state)
+; returns the attacked target
+(: attack (-> GameState GameObject GameObject GameObject))
+(define (attack state attacker target)
+  (define attacker-fighter (game-object-fighter attacker))
+  (define target-fighter (game-object-fighter target))
+  (define damage (- (fighter-power (cast attacker-fighter Fighter))
+                    (fighter-defense (cast target-fighter Fighter))))
+
+  (cond [(> damage 0)
+         (log-debug "~s attacks ~s for ~v hit points."
+                    (game-object-name attacker)
+                    (game-object-name target)
+                    damage)
+         (take-damage target damage)]
+        [else
+         (log-debug "~s attacks ~s but is has no effect!"
+                    (game-object-name attacker)
+                    (game-object-name target))
+         target]))
+
+(: player-move-or-attack (-> GameState GameObject GameState))
+(define (player-move-or-attack state player)
   (define-values (dx dy) (get-move-deltas))
   (define target (attack? state dx dy))
-  (if (game-object? target)
-      (attack state target)
-      (move state dx dy)))
+  (cond [(game-object? target)
+         (struct-copy game-state
+                      state
+                      [objects (for/list : (Listof GameObject)
+                                   ([obj : GameObject (game-state-objects state)])
+                                 (if (equal? obj target)
+                                     (attack state player target)
+                                     obj))])]
+        [else (struct-copy game-state
+                           state
+                           [fov-recompute #t]
+                           [player (move state player dx dy)])]))
 
 (: handle-keys (-> GameState GameState))
 (define (handle-keys state)
-  ;;(define key (console-wait-for-keypress #t))
-  (define-values (event key mouse) (sys-wait-for-event 'KEY #t))
+  (define key (console-wait-for-keypress #t))
+  ;;(define-values (event key mouse) (sys-wait-for-event 'KEY #t))
   (define vk (key-vk key))
 
   ;(log-debug (format "EVENT: ~s" event))
@@ -239,33 +322,50 @@
      (struct-copy game-state state [exit #t] [action 'exit])]
     [(and (eq? 'playing (game-state-mode state))
           (member vk '(UP DOWN LEFT RIGHT)))
-     (struct-copy game-state (player-move-or-attack state) [action 'turn])]
+     (struct-copy game-state
+                  (player-move-or-attack state (game-state-player state))
+                  [action 'turn])]
     [else (struct-copy game-state state [action 'no-turn])]))
 
 (: clear-object-positions (-> GameState GameState))
 (define (clear-object-positions state)
   ;(log-debug "Clear old position of objects")
   (define player (game-state-player state))
+  (define fov-map (game-state-fov state))
   (for-each (lambda ([obj : GameObject])
-              (clear (game-object-position obj) offscreen-console))
+              (clear (game-object-position obj) offscreen-console fov-map))
             (cons player (game-state-objects state)))
 
   state)
 
+(: objects-take-turn (-> GameState GameState))
+(define (objects-take-turn state)
+  (cond [(and (eq? 'playing (game-state-mode state))
+              (eq? 'turn (game-state-action state)))
+         (define-values (new-objs new-player)
+           (for/fold
+               ([latest-objs : (Listof GameObject) '()]
+                [latest-player : GameObject (game-state-player state)])
+               ([current-obj (game-state-objects state)])
+             (cond [(null? (game-object-ai current-obj))
+                    (values (cons current-obj latest-objs) latest-player)]
+                   [else
+                    (define-values (latest-obj latest-player)
+                      (basic-monster-take-turn state current-obj))
+                    (values (cons latest-obj latest-objs)
+                            latest-player)])))
+         (struct-copy game-state state [player new-player] [objects new-objs])]
+        [else state]))
+
 (: game-loop (-> GameState Void))
 (define (game-loop state)
-  (define closed? (console-is-window-closed))
-  (unless closed?
+  (unless (console-is-window-closed)
     (define new-state
       (~> state
           (render-all offscreen-console)
-          (clear-object-positions)
-          (handle-keys)))
-    
-;      (when (and (eq? 'playing (game-state-mode new-state))
-;                 (eq? 'turn (game-state-action new-state)))
-;        (for ([o (game-state-objects new-state)])
-;          (log-debug "The ~s growls!" (game-object-name o))))
+          clear-object-positions
+          handle-keys
+          objects-take-turn))
 
     (game-loop (if (game-state-exit new-state)
                    (exit)

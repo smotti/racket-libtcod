@@ -88,9 +88,9 @@
 
 (: create-room (-> Rectangle (Array Tile) Void))
 (define (create-room shape a-map)
-  (for ([x (in-range (+ (rectangle-x1 shape) 1)
+  (for ([x (in-range (add1 (rectangle-x1 shape))
                      (rectangle-x2 shape))])
-    (for ([y (in-range (+ (rectangle-y1 shape) 1)
+    (for ([y (in-range (add1 (rectangle-y1 shape))
                        (rectangle-y2 shape))])
       (: t Tile)
       (define t (array-ref a-map `#(,y ,x)))
@@ -99,7 +99,7 @@
 
 (: create-h-tunnel (-> Integer Integer Integer (Array Tile) Void))
 (define (create-h-tunnel x1 x2 y a-map)
-  (for ([x (in-range (min x1 x2) (+ (max x1 x2) 1))])
+  (for ([x (in-range (min x1 x2) (add1 (max x1 x2)))])
     (: t Tile)
     (define t (array-ref a-map `#(,y ,x)))
     (set-tile-blocked! t #f)
@@ -107,7 +107,7 @@
 
 (: create-v-tunnel (-> Integer Integer Integer (Array Tile) Void))
 (define (create-v-tunnel y1 y2 x a-map)
-  (for ([y (in-range (min y1 y2) (+ (max y1 y2) 1))])
+  (for ([y (in-range (min y1 y2) (add1 (max y1 y2)))])
     (: t Tile)
     (define t (array-ref a-map `#(,y ,x)))
     (set-tile-blocked! t #f)
@@ -135,16 +135,24 @@
                                            color-desaturated-green
                                            'monster
                                            "Orc"
-                                           #:blocks? #t))
-          (accumulate-objects (cons new-obj objs) (+ 1 counter))]
+                                           #:blocks? #t
+                                           #:fighter (make-fighter #:hp 10
+                                                                   #:defense 0
+                                                                   #:power 3)
+                                           #:ai (make-basic-monster)))
+          (accumulate-objects (cons new-obj objs) (add1 counter))]
          [else
           (define new-obj (make-game-object (make-position x y)
                                             #\T
                                             color-darker-green
                                             'monster
                                             "Troll"
-                                            #:blocks? #t))
-          (accumulate-objects (cons new-obj objs) (+ 1 counter))])]))
+                                            #:blocks? #t
+                                            #:fighter (make-fighter #:hp 16
+                                                                    #:defense 1
+                                                                    #:power 4)
+                                            #:ai (make-basic-monster)))
+          (accumulate-objects (cons new-obj objs) (add1 counter))])]))
 
   (accumulate-objects '() 0))
 
@@ -205,7 +213,7 @@
        (make-rooms (cons new-room rooms)
                    (append (place-objects new-room a-map) objs)
                    (make-new-room)
-                   (+ 1 no-of-rooms))]))
+                   (add1 no-of-rooms))]))
 
   (define-values (rooms objs) (make-rooms '() '() first-room 0))
   (log-debug "Created map")
