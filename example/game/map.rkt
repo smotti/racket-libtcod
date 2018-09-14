@@ -194,22 +194,18 @@
       [else
        (log-debug "Create new room")
        (create-room new-room a-map)
-       (define-values (new-x new-y) (center new-room))
 
-       (cond
-         [(= 0 no-of-rooms)
-          ; Put player at center of first room
-          (log-debug "Putting player at the center of first room")
-          ]
-         [else
-          (log-debug "Connect new room to existing rooms")
-          (define-values (prev-x prev-y) (center (first rooms)))
-          (cond
-            [(= 1 (random-default-get-int 0 1))
-             (create-h-tunnel prev-x new-x prev-y a-map)
-             (create-v-tunnel prev-y new-y new-x a-map)]
-            [else (create-v-tunnel prev-y new-y prev-x a-map)
-                  (create-h-tunnel prev-x new-x new-y a-map)])])
+       (define-values (new-x new-y) (center new-room))
+       (log-debug "Connect new room to existing rooms")
+
+       (when (> no-of-rooms 0)
+         (define-values (prev-x prev-y) (center (first rooms)))
+         (cond
+           [(= 1 (random-default-get-int 0 1))
+            (create-h-tunnel prev-x new-x prev-y a-map)
+            (create-v-tunnel prev-y new-y new-x a-map)]
+           [else (create-v-tunnel prev-y new-y prev-x a-map)
+                 (create-h-tunnel prev-x new-x new-y a-map)]))
        (make-rooms (cons new-room rooms)
                    (append (place-objects new-room a-map) objs)
                    (make-new-room)
