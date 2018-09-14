@@ -68,10 +68,6 @@
 (define SCREEN-WIDTH 80)
 (define SCREEN-HEIGHT 50)
 
-
-
-; NOTE: That we have to use type Any for fov here, because the type checker would
-;       fail even if the given type is the expected type.
 (struct game-state ([player : GameObject]
                     [exit : Boolean]
                     [objects : (Listof GameObject)]
