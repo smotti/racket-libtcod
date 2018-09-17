@@ -7,6 +7,7 @@
          typed/racket/class
 
          "../../color.rkt"
+         "../../fov.rkt"
          "game-types.rkt"
          "map.rkt")
 
@@ -31,14 +32,6 @@
   [console-set-window-title (-> String Void)]
   [console-wait-for-keypress (-> Boolean Key)]
   [key-vk (-> Key Symbol)]
-  )
-
-(require/typed "../../fov.rkt"
-  [#:opaque FovMap fov-map?]
-  [map-compute-fov (-> FovMap Integer Integer Integer Boolean Integer Void)]
-  [map-is-in-fov (-> FovMap Integer Integer Boolean)]
-  [map-new (-> Integer Integer FovMap)]
-  [map-set-properties (-> FovMap Integer Integer Boolean Boolean Void)]
   )
 
 (require/typed "../../mouse.rkt"
@@ -68,26 +61,17 @@
 (define SCREEN-WIDTH 80)
 (define SCREEN-HEIGHT 50)
 
-(struct game-state ([player : GameObject]
-                    [exit : Boolean]
-                    [objects : (Listof GameObject)]
-                    [map : (Array Tile)]
-                    [fov : FovMap]
-                    [fov-recompute : Boolean]
-                    [mode : Symbol]
-                    [action : Symbol]))
-(define-type GameState game-state)
-
-(define default-player (make-game-object (position 0 0)
-                                         #\@
-                                         color-white
-                                         'player
-                                         "namra"
-                                         #:fighter (make-fighter #:hp 30
-                                                                 #:defense 2
-                                                                 #:power 5)))
-
-(log-debug "Default player: ~a" default-player)
+(define default-player
+  (make-game-object (position 0 0)
+                    #\@
+                    color-white
+                    'player
+                    "namra"
+                    'alive
+                    #:fighter (make-fighter #:hp 30
+                                            #:defense 2
+                                            #:power 5
+                                            #:die-proc die-player)))
 
 (define root-console (console-init-root SCREEN-WIDTH
                                    SCREEN-HEIGHT
@@ -153,9 +137,14 @@
        (struct-copy game-state state [fov-recompute #f])]
       [else state]))
 
-  ;(log-debug "Draw game objects")
+  ;(log-debug "Draw dead game objects")
   (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
-            (cons player (game-state-objects new-state)))
+            (game-state-dead new-state))
+
+  ;(log-debug "Draw alive game objects")
+  (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
+            (game-state-objects new-state))
+  (draw player fov-map con)
 
   (define player-fighter (game-object-fighter player))
   (console-set-default-foreground con color-white)
@@ -263,7 +252,8 @@
   (for/or : (U GameObject Boolean) ([o : GameObject (game-state-objects state)])
     (define obj-posn (game-object-position o))
     (if (and (= x (position-x obj-posn))
-             (= y (position-y obj-posn)))
+             (= y (position-y obj-posn))
+             (not (null? (game-object-fighter o))))
         o
         #f)))
 
@@ -271,12 +261,14 @@
 (define (take-damage obj damage)
   (define a-fighter (game-object-fighter obj))
   ; This is a good place where lenses would make things better
-  (struct-copy game-object
-               obj
-               [fighter (struct-copy fighter
-                                     a-fighter
-                                     [hp (- (fighter-hp a-fighter)
-                                            damage)])]))
+  (define new-fighter (struct-copy fighter
+                                   a-fighter
+                                   [hp (- (fighter-hp a-fighter)
+                                          damage)]))
+  (define new-obj-w-fighter (struct-copy game-object obj [fighter new-fighter]))
+  (if (<= (fighter-hp new-fighter) 0)
+      ((fighter-die-proc new-fighter) new-obj-w-fighter)
+      new-obj-w-fighter))
 
 ; returns the attacked target
 (: attack (-> GameState GameObject GameObject GameObject))
@@ -291,8 +283,6 @@
                     (game-object-name attacker)
                     (game-object-name target)
                     damage)
-         (when (eq? 'player (game-object-type target))
-           (log-debug "DAMAGED PLAYER: ~a" (take-damage target damage)))
          (take-damage target damage)]
         [else
          (log-debug "~s attacks ~s but is has no effect!"
@@ -366,6 +356,18 @@
          (struct-copy game-state new-state [objects new-objs])]
         [else state]))
 
+(: filter-objects (-> GameState GameState))
+(define (filter-objects state)
+  (define-values (alive-objs dead-objs)
+    (for/fold ([as : (Listof GameObject) '()]
+               [ds : (Listof GameObject) (game-state-dead state)])
+              ([o (game-state-objects state)])
+      (cond [(null? o) (values as ds)]
+            [(alive? o) (values (cons o as) ds)]
+            [(dead? o) (values as (cons o ds))]
+            [else (values as ds)])))
+  (struct-copy game-state state [objects alive-objs] [dead dead-objs]))
+
 (: game-loop (-> GameState Void))
 (define (game-loop state)
   (unless (console-is-window-closed)
@@ -374,7 +376,8 @@
           (render-all offscreen-console)
           clear-object-positions
           handle-keys
-          objects-take-turn))
+          objects-take-turn
+          filter-objects))
 
     (game-loop (if (game-state-exit new-state)
                    (exit)
@@ -403,5 +406,6 @@
                 #f  ; recompute fov
                 'playing  ; mode
                 'no-turn  ; action
+                '() ; dead monsters
                 )))
 (game-loop initial-game-state)

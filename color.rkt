@@ -4,6 +4,7 @@
   (provide _color
           color?
           color-dark-blue
+          color-dark-red
           color-darker-green
           color-desaturated-green
           color-white
@@ -28,16 +29,16 @@
   ;;;
 
   (define-tcod color-dark-blue _color #:c-id TCOD_dark_blue)
+  (define-tcod color-dark-red _color #:c-id TCOD_dark_red)
   (define-tcod color-darker-green _color #:c-id TCOD_darker_green)
   (define-tcod color-desaturated-green _color #:c-id TCOD_desaturated_green)
-  ;(define color-darker-green (make-color 0 127 0))
-  ;(define color-desaturated-green (make-color 63 127 63))
   (define-tcod color-white _color #:c-id TCOD_white)
   (define-tcod color-yellow _color #:c-id TCOD_yellow))
 
 (require/typed/provide 'ffi-color
   [#:opaque Color color?]
   [color-dark-blue Color]
+  [color-dark-red Color]
   [color-darker-green Color]
   [color-desaturated-green Color]
   [color-white Color]

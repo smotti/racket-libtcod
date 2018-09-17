@@ -135,10 +135,13 @@
                                            color-desaturated-green
                                            'monster
                                            "Orc"
+                                           'alive
                                            #:blocks? #t
-                                           #:fighter (make-fighter #:hp 10
-                                                                   #:defense 0
-                                                                   #:power 3)
+                                           #:fighter (make-fighter
+                                                      #:hp 10
+                                                      #:defense 0
+                                                      #:power 3
+                                                      #:die-proc die-monster)
                                            #:ai (make-basic-monster)))
           (accumulate-objects (cons new-obj objs) (add1 counter))]
          [else
@@ -147,10 +150,13 @@
                                             color-darker-green
                                             'monster
                                             "Troll"
+                                            'alive
                                             #:blocks? #t
-                                            #:fighter (make-fighter #:hp 16
-                                                                    #:defense 1
-                                                                    #:power 4)
+                                            #:fighter (make-fighter
+                                                       #:hp 16
+                                                       #:defense 1
+                                                       #:power 4
+                                                       #:die-proc die-monster)
                                             #:ai (make-basic-monster)))
           (accumulate-objects (cons new-obj objs) (add1 counter))])]))
 
