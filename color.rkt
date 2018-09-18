@@ -3,10 +3,13 @@
 (module ffi-color racket
   (provide _color
           color?
+          color-black
           color-dark-blue
           color-dark-red
           color-darker-green
+          color-darker-red
           color-desaturated-green
+          color-light-red
           color-white
           color-yellow
           make-color
@@ -28,19 +31,25 @@
   ;;; Colors
   ;;;
 
+  (define-tcod color-black _color #:c-id TCOD_black)
   (define-tcod color-dark-blue _color #:c-id TCOD_dark_blue)
   (define-tcod color-dark-red _color #:c-id TCOD_dark_red)
   (define-tcod color-darker-green _color #:c-id TCOD_darker_green)
+  (define-tcod color-darker-red _color #:c-id TCOD_darker_red)
   (define-tcod color-desaturated-green _color #:c-id TCOD_desaturated_green)
+  (define-tcod color-light-red _color #:c-id TCOD_light_red)
   (define-tcod color-white _color #:c-id TCOD_white)
   (define-tcod color-yellow _color #:c-id TCOD_yellow))
 
 (require/typed/provide 'ffi-color
   [#:opaque Color color?]
+  [color-black Color]
   [color-dark-blue Color]
   [color-dark-red Color]
   [color-darker-green Color]
+  [color-darker-red Color]
   [color-desaturated-green Color]
+  [color-light-red Color]
   [color-white Color]
   [color-yellow Color]
   [make-color (-> Integer Integer Integer Color)]
