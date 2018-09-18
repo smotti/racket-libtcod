@@ -4,6 +4,7 @@
          console?
          console-blit
          ;         console-disable-keyboard-repeat
+         console-clear
          console-flush
          console-init-root
          console-is-key-pressed
@@ -12,8 +13,10 @@
          console-print-ex
          console-put-char
          console-put-char-ex
+         console-rect
          console-root
          console-set-char-background
+         console-set-default-background
          console-set-default-foreground
          ;         console-set-keyboard-repeat
          console-set-window-title
@@ -136,20 +139,41 @@
 
 (define _alignment (_enum '(LEFT RIGHT CENTER)))
 
-(define _bkgnd_flag (_enum '(BKGND_NONE BKGND_SET)))
+(define _bkgnd_flag (_enum '(BKGND_NONE
+                             BKGND_SET
+                             BKGND_MULTIPLY
+                             BKGND_LIGHTEN
+                             BKGND_DARKEN
+                             BKGND_SCREEN
+                             BKGND_COLOR_DODGE
+                             BKGND_COLOR_BURN
+                             BKGND_ADD
+                             BKGND_ADDA
+                             BKGND_BURN
+                             BKGND_OVERLAY
+                             BKGND_ALPH
+                             BKGND_DEFAULT)))
 
 ;;;
 ;;; Console
 ;;;
 
-(define-tcod console-init-root
-  (_fun _int _int _string _bool _renderer -> _void)
-  #:c-id TCOD_console_init_root)
-
 (define-tcod console-blit
   (_fun _console _int _int _int _int _int _int _int (_float = 1.0) (_float = 1.0)
         -> _void)
   #:c-id TCOD_console_blit)
+
+(define-tcod console-clear
+  (_fun _console -> _void)
+  #:c-id TCOD_console_clear)
+
+(define-tcod console-flush
+  (_fun -> _void)
+  #:c-id TCOD_console_flush)
+
+(define-tcod console-init-root
+  (_fun _int _int _string _bool _renderer -> _void)
+  #:c-id TCOD_console_init_root)
 
 (define-tcod console-is-window-closed
   (_fun -> _bool)
@@ -158,14 +182,6 @@
 (define-tcod console-new
   (_fun _int _int -> _console)
   #:c-id TCOD_console_new)
-
-(define-tcod console-set-window-title
-  (_fun _string -> _void)
-  #:c-id TCOD_console_set_window_title)
-
-(define-tcod console-set-default-foreground
-  (_fun _console _color -> _void)
-  #:c-id TCOD_console_set_default_foreground)
 
 (define-tcod console-print-ex
   (_fun _console _int _int _bkgnd_flag _alignment _string -> _void)
@@ -179,26 +195,38 @@
   (_fun _console _int _int _char _color _color -> _void)
   #:c-id TCOD_console_put_char_ex)
 
+(define-tcod console-rect
+  (_fun _console _int _int _int _int _bool _bkgnd_flag -> _void)
+  #:c-id TCOD_console_rect)
+
 (define-tcod console-set-char-background
- (_fun _console _int _int _color _bkgnd_flag -> _void)
+  (_fun _console _int _int _color _bkgnd_flag -> _void)
   #:c-id TCOD_console_set_char_background)
 
-(define-tcod console-flush
-  (_fun -> _void)
-  #:c-id TCOD_console_flush)
+(define-tcod console-set-default-background
+  (_fun _console _color -> _void)
+  #:c-id TCOD_console_set_default_background)
+
+(define-tcod console-set-default-foreground
+  (_fun _console _color -> _void)
+  #:c-id TCOD_console_set_default_foreground)
+
+(define-tcod console-set-window-title
+  (_fun _string -> _void)
+  #:c-id TCOD_console_set_window_title)
 
 ;;;
 ;;; Keyboard Input
 ;;;
-;
+
 ;(define-tcod console-disable-keyboard-repeat
 ;  (_fun -> _void)
 ;  #:c-id TCOD_console_disable_keyboard_repeat)
-;
+
 ;(define-tcod console-set-keyboard-repeat
 ;  (_fun _int _int -> _void)
 ;  #:c-id TCOD_console_set_keyboard_repeat)
-;
+
 (define-tcod console-wait-for-keypress
   (_fun _bool -> _key)
   #:c-id TCOD_console_wait_for_keypress)
