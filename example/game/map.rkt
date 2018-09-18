@@ -20,7 +20,7 @@
 
 ;; for map
 (define MAP-WIDTH 80)
-(define MAP-HEIGHT 45)
+(define MAP-HEIGHT 43)
 
 ;; for rooms
 (define ROOM-MAX-SIZE 10)

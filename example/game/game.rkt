@@ -18,6 +18,7 @@
   [#:opaque Console console?]
   [#:opaque Key key?]
   [console-blit (-> Console Integer Integer Integer Integer Integer Integer Integer Void)]
+  [console-clear (-> Console Void)]
   [console-flush (-> Void)]
   [console-init-root (-> Integer Integer String Boolean Symbol Void)]
   [console-is-key-pressed (-> Symbol Boolean)]
@@ -26,8 +27,10 @@
   [console-print-ex (-> Console Integer Integer Symbol Symbol String Void)]
   [console-put-char (-> Console Integer Integer Char Symbol Void)]
   [console-put-char-ex (-> Console Integer Integer Char Color Color Void)]
+  [console-rect (-> Console Integer Integer Integer Integer Boolean Symbol Void)]
   [console-root Integer]
   [console-set-char-background (-> Console Integer Integer Color Symbol Void)]
+  [console-set-default-background (-> Console Color Void)]
   [console-set-default-foreground (-> Console Color Void)]
   [console-set-window-title (-> String Void)]
   [console-wait-for-keypress (-> Boolean Key)]
@@ -61,6 +64,10 @@
 (define SCREEN-WIDTH 80)
 (define SCREEN-HEIGHT 50)
 
+(define BAR-WIDTH 20)
+(define PANEL-HEIGHT 7)
+(define PANEL-Y (- SCREEN-HEIGHT PANEL-HEIGHT))
+
 (define default-player
   (make-game-object (position 0 0)
                     #\@
@@ -78,7 +85,8 @@
                                    "Example"
                                    #f
                                    'RENDERER_SDL))
-(define offscreen-console (console-new SCREEN-WIDTH SCREEN-HEIGHT))
+(define offscreen-console (console-new MAP-WIDTH MAP-HEIGHT))
+(define panel (console-new SCREEN-WIDTH PANEL-HEIGHT))
 ;(console-set-keyboard-repeat 1 25)
 
 (: draw (-> GameObject FovMap Console Void))
@@ -96,8 +104,24 @@
                       (game-object-char a-object)
                       'BKGND_NONE)))
 
-(: render-all (-> GameState Console GameState))
-(define (render-all state con)
+(: render-bar (-> Console Integer Integer Integer String Integer Integer Color Color Void))
+(define (render-bar console x y total-width name value maximum bar-color back-color)
+  (console-set-default-background console back-color)
+  (console-rect console x y total-width 1 #f 'BKGND_SCREEN)
+
+  (define bar-width (exact-round (* (/ value maximum) total-width)))
+  (console-set-default-background console bar-color)
+  (when (> bar-width 0)
+    (console-rect console x y bar-width 1 #f 'BKGND_SCREEN))
+
+  (console-set-default-foreground console color-white)
+  (console-print-ex console
+                    (exact-round (/ (+ x total-width) 2)) y
+                    'BKGND_NONE 'CENTER
+                    (format "~a: ~a/~a" name value maximum)))
+
+(: render-all (-> GameState Console Console GameState))
+(define (render-all state con panel)
   ;(log-debug "Render screen")
 
   (define a-map (game-state-map state))
@@ -146,19 +170,21 @@
             (game-state-objects new-state))
   (draw player fov-map con)
 
+  (console-set-default-background panel color-black)
+  (console-clear panel)
   (define player-fighter (game-object-fighter player))
-  (console-set-default-foreground con color-white)
-  (console-print-ex con
-                    1
-                    (- SCREEN-HEIGHT 2)
-                    'BKGND_NONE
-                    'LEFT
-                    (format "HP : ~v/~v"
-                            (fighter-hp (cast player-fighter Fighter))
-                            (fighter-max-hp (cast player-fighter Fighter))))
+  (render-bar panel
+              1 1
+              BAR-WIDTH
+              "HP"
+              (fighter-hp (cast player-fighter Fighter))
+              (fighter-max-hp (cast player-fighter Fighter))
+              color-light-red color-darker-red)
+  (console-blit panel 0 0 SCREEN-WIDTH PANEL-HEIGHT console-root 0 PANEL-Y)
+
 
   ;(log-debug "Blit drawing offscreen-console to root-console")
-  (console-blit con 0 0 SCREEN-WIDTH SCREEN-HEIGHT console-root 0 0)
+  (console-blit con 0 0 MAP-WIDTH MAP-HEIGHT console-root 0 0)
   (console-flush)
 
   new-state)
@@ -373,7 +399,7 @@
   (unless (console-is-window-closed)
     (define new-state
       (~> state
-          (render-all offscreen-console)
+          (render-all offscreen-console panel)
           clear-object-positions
           handle-keys
           objects-take-turn
