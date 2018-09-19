@@ -10,6 +10,8 @@
           color-darker-red
           color-desaturated-green
           color-light-red
+          color-orange
+          color-red
           color-white
           color-yellow
           make-color
@@ -38,6 +40,8 @@
   (define-tcod color-darker-red _color #:c-id TCOD_darker_red)
   (define-tcod color-desaturated-green _color #:c-id TCOD_desaturated_green)
   (define-tcod color-light-red _color #:c-id TCOD_light_red)
+  (define-tcod color-orange _color #:c-id TCOD_orange)
+  (define-tcod color-red _color #:c-id TCOD_red)
   (define-tcod color-white _color #:c-id TCOD_white)
   (define-tcod color-yellow _color #:c-id TCOD_yellow))
 
@@ -50,6 +54,8 @@
   [color-darker-red Color]
   [color-desaturated-green Color]
   [color-light-red Color]
+  [color-orange Color]
+  [color-red Color]
   [color-white Color]
   [color-yellow Color]
   [make-color (-> Integer Integer Integer Color)]
