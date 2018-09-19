@@ -8,6 +8,7 @@
 
          "../../color.rkt"
          "../../fov.rkt"
+         "game-constants.rkt"
          "game-types.rkt"
          "map.rkt")
 
@@ -60,13 +61,6 @@
 (define FOV-ALGO 0)
 (define FOV-LIGHT-WALLS #t)
 (define TORCH-RADIUS 10)
-
-(define SCREEN-WIDTH 80)
-(define SCREEN-HEIGHT 50)
-
-(define BAR-WIDTH 20)
-(define PANEL-HEIGHT 7)
-(define PANEL-Y (- SCREEN-HEIGHT PANEL-HEIGHT))
 
 (define default-player
   (make-game-object (position 0 0)
@@ -170,6 +164,7 @@
             (game-state-objects new-state))
   (draw player fov-map con)
 
+  ;(log-debug "Render HP status bar")
   (console-set-default-background panel color-black)
   (console-clear panel)
   (define player-fighter (game-object-fighter player))
@@ -180,8 +175,16 @@
               (fighter-hp (cast player-fighter Fighter))
               (fighter-max-hp (cast player-fighter Fighter))
               color-light-red color-darker-red)
-  (console-blit panel 0 0 SCREEN-WIDTH PANEL-HEIGHT console-root 0 PANEL-Y)
 
+  ;(log-debug "Render message log")
+  (define messages (unbox message-log))
+  (for ([y (length messages)]
+        [m messages])
+    ;(log-debug "Render message: ~v in color ~v at ~v" (car m) (cdr m) y)
+    (console-set-default-foreground panel (cdr m))
+    (console-print-ex panel MSG-X (add1 y) 'BKGND_NONE 'LEFT (car m)))
+
+  (console-blit panel 0 0 SCREEN-WIDTH PANEL-HEIGHT console-root 0 PANEL-Y)
 
   ;(log-debug "Blit drawing offscreen-console to root-console")
   (console-blit con 0 0 MAP-WIDTH MAP-HEIGHT console-root 0 0)
@@ -305,15 +308,15 @@
                     (fighter-defense (cast target-fighter Fighter))))
 
   (cond [(> damage 0)
-         (log-debug "~s attacks ~s for ~v hit points."
-                    (game-object-name attacker)
-                    (game-object-name target)
-                    damage)
+         (message-add (format "~s attacks ~s for ~v hit points."
+                              (game-object-name attacker)
+                              (game-object-name target)
+                              damage))
          (take-damage target damage)]
         [else
-         (log-debug "~s attacks ~s but is has no effect!"
-                    (game-object-name attacker)
-                    (game-object-name target))
+         (message-add (format "~s attacks ~s but is has no effect!"
+                       (game-object-name attacker)
+                       (game-object-name target)))
          target]))
 
 (: player-move-or-attack (-> GameState GameObject GameState))
@@ -434,4 +437,7 @@
                 'no-turn  ; action
                 '() ; dead monsters
                 )))
+
+(message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."
+             #:color color-red)
 (game-loop initial-game-state)

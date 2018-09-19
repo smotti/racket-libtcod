@@ -9,6 +9,8 @@
          make-fighter
          make-position
          make-tile
+         message-log
+         message-add
          BasicMonster
          GameObject
          GameState
@@ -24,10 +26,42 @@
          )
 
 (require math/array
+         racket/list
 
          "../../color.rkt"
          "../../fov.rkt"
+         "game-constants.rkt"
          )
+
+;;;
+;;; Message log
+;;;
+
+(: message-log (Boxof (Listof (Pair String Color))))
+(define message-log (box '()))
+
+(: message-wrap (-> String Integer (Listof String)))
+(define (message-wrap a-message max-width)
+  (define message-length (string-length a-message))
+  (for/list ([w (range 0 message-length max-width)])
+    (define end-index (+ w max-width))
+    (substring a-message w (if (> end-index message-length)
+                               message-length
+                               end-index))))
+
+(: message-add (-> String (#:color Color) Void))
+(define (message-add a-message #:color [color color-white])
+  (define message-lines (message-wrap a-message MSG-WIDTH))
+  (define current-messages (unbox message-log))
+  (define new-messages
+    (for/fold : (Listof (Pair String Color))
+        ([ms current-messages])
+        ([m message-lines])
+      (if (= (length ms) MSG-HEIGHT)
+          (append (drop ms 1) (list (cons m color)))
+          (append ms (list (cons m color))))))
+
+  (set-box! message-log new-messages))
 
 ;;;
 ;;; General types
@@ -125,7 +159,7 @@
 
 (: die-player (-> GameObject GameObject))
 (define (die-player obj)
-  (log-debug "You died!")
+  (message-add "You died!" #:color color-red)
   (struct-copy game-object
                obj
                [char #\%] [color color-dark-red]
@@ -133,7 +167,8 @@
 
 (: die-monster (-> GameObject GameObject))
 (define (die-monster obj)
-  (log-debug "~s is dead!" (game-object-name obj))
+  (message-add (format "~s is dead!" (game-object-name obj))
+               #:color color-orange)
   (struct-copy game-object
                obj
                [char #\%] [color color-dark-red]
