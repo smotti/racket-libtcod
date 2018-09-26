@@ -431,14 +431,7 @@
     (make-game-state
      (struct-copy game-object default-player [position player-start-position])
      objs
-     a-map
-     fov-map
-     #f  ; recompute fov
-     #f  ; exit game
-     'playing  ; mode
-     'no-turn  ; action
-     '() ; dead monsters
-     )))
+     a-map fov-map)))
 
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."
              #:color color-red)
