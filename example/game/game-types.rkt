@@ -6,6 +6,7 @@
          die-player
          make-basic-monster
          make-game-object
+         make-game-state
          make-fighter
          make-position
          make-tile
@@ -29,7 +30,10 @@
          racket/list
 
          "../../color.rkt"
+         "../../console.rkt"
          "../../fov.rkt"
+         "../../mouse.rkt"
+         "../../sys.rkt"
          "game-constants.rkt"
          )
 
@@ -115,16 +119,43 @@
   (eq? (game-object-state obj) 'dead))
 
 (struct game-state ([player : GameObject]
-                    [exit : Boolean]
                     [objects : (Listof GameObject)]
                     [map : (Array Tile)]
                     [fov : FovMap]
                     [fov-recompute : Boolean]
+                    [exit : Boolean]
                     [mode : Symbol]
                     [action : Symbol]
                     [dead : (Listof GameObject)]
+                    [event : Symbol]
+                    [key : Key]
+                    [mouse : Mouse]
                     ))
 (define-type GameState game-state)
+
+(: make-game-state (->* (GameObject  ; Mandatory fields
+                         (Listof GameObject)
+                         (Array Tile) FovMap)
+                        (Boolean Boolean  ; Optional fields
+                         Symbol Symbol
+                         (Listof GameObject)
+                         Symbol Key Mouse)
+                        GameState))
+(define (make-game-state player
+                         objects
+                         map fov-map
+                         [fov-recompute #f] [exit #f]
+                         [mode 'playing] [action 'no-turn]
+                         [dead '()]
+                         [event 'KEY_PRESS_MOUSE_MOVE]
+                         [key (make-key-default)] [mouse (make-mouse-default)])
+  (game-state player
+              objects
+              map fov-map
+              fov-recompute exit
+              mode action
+              dead
+              event key mouse))
 
 ;;;
 ;;; Components (Traits)

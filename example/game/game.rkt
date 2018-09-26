@@ -7,45 +7,13 @@
          typed/racket/class
 
          "../../color.rkt"
+         "../../console.rkt"
          "../../fov.rkt"
+         "../../mouse.rkt"
+         "../../sys.rkt"
          "game-constants.rkt"
          "game-types.rkt"
          "map.rkt")
-
-(require/typed racket/base
-  [(vector->values map-indexes) (-> Any (Values Integer Integer))])
-
-(require/typed "../../console.rkt"
-  [#:opaque Console console?]
-  [#:opaque Key key?]
-  [console-blit (-> Console Integer Integer Integer Integer Integer Integer Integer Void)]
-  [console-clear (-> Console Void)]
-  [console-flush (-> Void)]
-  [console-init-root (-> Integer Integer String Boolean Symbol Void)]
-  [console-is-key-pressed (-> Symbol Boolean)]
-  [console-is-window-closed (-> Boolean)]
-  [console-new (-> Integer Integer Console)]
-  [console-print-ex (-> Console Integer Integer Symbol Symbol String Void)]
-  [console-put-char (-> Console Integer Integer Char Symbol Void)]
-  [console-put-char-ex (-> Console Integer Integer Char Color Color Void)]
-  [console-rect (-> Console Integer Integer Integer Integer Boolean Symbol Void)]
-  [console-root Integer]
-  [console-set-char-background (-> Console Integer Integer Color Symbol Void)]
-  [console-set-default-background (-> Console Color Void)]
-  [console-set-default-foreground (-> Console Color Void)]
-  [console-set-window-title (-> String Void)]
-  [console-wait-for-keypress (-> Boolean Key)]
-  [key-vk (-> Key Symbol)]
-  )
-
-(require/typed "../../mouse.rkt"
-  [#:opaque Mouse mouse?]
-  )
-
-(require/typed "../../sys.rkt"
-  [sys-wait-for-event (-> Symbol Boolean (Values Symbol Key Mouse))]
-  )
-
 
 (define game-logger (make-logger))
 
@@ -114,6 +82,23 @@
                     'BKGND_NONE 'CENTER
                     (format "~a: ~a/~a" name value maximum)))
 
+(: get-names-under-mouse (-> Mouse (Listof GameObject) FovMap String))
+(define (get-names-under-mouse mouse objects fov-map)
+  (define-values (x y) (values (mouse-cx mouse) (mouse-cy mouse)))
+  (define names
+    (for/fold
+        ([ns : (Listof String) '()])
+        ([obj objects])
+      (define obj-position (game-object-position obj))
+      (define obj-x (position-x obj-position))
+      (define obj-y (position-y obj-position))
+      (if (and (= obj-x x) (= obj-y y)
+               (map-is-in-fov fov-map obj-x obj-y))
+          (cons (game-object-name obj) ns)
+          ns)))
+
+  (string-join names ", "))
+
 (: render-all (-> GameState Console Console GameState))
 (define (render-all state con panel)
   ;(log-debug "Render screen")
@@ -175,6 +160,15 @@
               (fighter-hp (cast player-fighter Fighter))
               (fighter-max-hp (cast player-fighter Fighter))
               color-light-red color-darker-red)
+
+  ;(log-debug "Render object names under mouse cursor")
+  (console-set-default-foreground panel color-light-gray)
+  (console-print-ex panel
+                    1 0
+                    'BKGND_NONE 'LEFT
+                    (get-names-under-mouse (game-state-mouse new-state)
+                                           (game-state-objects new-state)
+                                           fov-map))
 
   ;(log-debug "Render message log")
   (define messages (unbox message-log))
@@ -338,11 +332,10 @@
 
 (: handle-keys (-> GameState GameState))
 (define (handle-keys state)
-  (define key (console-wait-for-keypress #t))
   ;;(define-values (event key mouse) (sys-wait-for-event 'KEY #t))
+  (define key (game-state-key state))
   (define vk (key-vk key))
 
-  ;(log-debug (format "EVENT: ~s" event))
   ;(log-debug (format "KEY EVENT: ~s - ~s" vk (key-c key)))
 
   (cond
@@ -397,12 +390,20 @@
             [else (values as ds)])))
   (struct-copy game-state state [objects alive-objs] [dead dead-objs]))
 
+(: wait-for-event (-> GameState GameState))
+(define (wait-for-event state)
+  (define-values (event key mouse) (sys-wait-for-event 'KEY_PRESS_MOUSE_MOVE
+                                                       #t))
+  (struct-copy game-state
+               state [event event] [key key] [mouse mouse]))
+
 (: game-loop (-> GameState Void))
 (define (game-loop state)
   (unless (console-is-window-closed)
     (define new-state
       (~> state
           (render-all offscreen-console panel)
+          wait-for-event
           clear-object-positions
           handle-keys
           objects-take-turn
@@ -427,16 +428,17 @@
                               x y
                               (not (tile-block-sight t)) (not (tile-blocked t))))))
 
-    (game-state (struct-copy game-object default-player [position player-start-position])
-                #f  ; exit game
-                objs
-                a-map
-                fov-map
-                #f  ; recompute fov
-                'playing  ; mode
-                'no-turn  ; action
-                '() ; dead monsters
-                )))
+    (make-game-state
+     (struct-copy game-object default-player [position player-start-position])
+     objs
+     a-map
+     fov-map
+     #f  ; recompute fov
+     #f  ; exit game
+     'playing  ; mode
+     'no-turn  ; action
+     '() ; dead monsters
+     )))
 
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."
              #:color color-red)
