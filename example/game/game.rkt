@@ -1,21 +1,46 @@
 #lang typed/racket
 
 (require math/array
-         racket/block
          racket/format
          threading
-         typed/racket/class
 
          "../../color.rkt"
          "../../console.rkt"
          "../../fov.rkt"
          "../../mouse.rkt"
          "../../sys.rkt"
+
+         "ai.rkt"
          "game-constants.rkt"
-         "game-types.rkt"
-         "map.rkt")
+         "game-object.rkt"
+         "map.rkt"
+         "message-log.rkt"
+         "player.rkt"
+         "types.rkt"
+         )
+
+
+;;;
+;;; Constants
+;;;
+
+(define FOV-ALGO 0)
+(define FOV-LIGHT-WALLS #t)
+(define TORCH-RADIUS 10)
+
+;;;
+;;; Globals
+;;;
 
 (define game-logger (make-logger))
+(define root-console (console-init-root SCREEN-WIDTH SCREEN-HEIGHT
+                                        "Example"
+                                        #f
+                                        'RENDERER_SDL))
+; Used for drawing the state before it gets copied to the actual root console
+(define offscreen-console (console-new MAP-WIDTH MAP-HEIGHT))
+; A status panel
+(define panel (console-new SCREEN-WIDTH PANEL-HEIGHT))
 
 ;;;
 ;;; Colors
@@ -26,45 +51,84 @@
 (define color-dark-ground (make-color 50 50 150))
 (define color-light-ground (make-color 200 180 50))
 
-(define FOV-ALGO 0)
-(define FOV-LIGHT-WALLS #t)
-(define TORCH-RADIUS 10)
 
-(define default-player
-  (make-game-object (position 0 0)
-                    #\@
-                    color-white
-                    'player
-                    "namra"
-                    'alive
-                    #:fighter (make-fighter #:hp 30
-                                            #:defense 2
-                                            #:power 5
-                                            #:die-proc die-player)))
+(: check-for-input (-> (Values Symbol Key Mouse)))
+(define (check-for-input)
+  (sys-check-for-event 'KEY_PRESS_MOUSE_MOVE))
 
-(define root-console (console-init-root SCREEN-WIDTH
-                                   SCREEN-HEIGHT
-                                   "Example"
-                                   #f
-                                   'RENDERER_SDL))
-(define offscreen-console (console-new MAP-WIDTH MAP-HEIGHT))
-(define panel (console-new SCREEN-WIDTH PANEL-HEIGHT))
-;(console-set-keyboard-repeat 1 25)
+(: process-input (-> GameState GameState))
+(define (process-input state)
+  (define-values (event key mouse) (check-for-input))
+  (define key-pressed (key-vk key))
 
-(: draw (-> GameObject FovMap Console Void))
-(define (draw a-object fov-map con)
-  ;(log-debug (format "Draw object: ~s" a-object))
-  (define obj-posn (game-object-position a-object))
-  (define x (position-x obj-posn))
-  (define y (position-y obj-posn))
+  ;(log-debug "Process Input")
+  ;(log-debug (format "Event: ~v --- Key: ~v --- Mouse: ~v" event key-pressed mouse))
 
-  (when (map-is-in-fov fov-map x y)
-    (console-set-default-foreground con (game-object-color a-object))
-    (console-put-char con
-                      x
-                      y
-                      (game-object-char a-object)
-                      'BKGND_NONE)))
+  (define exit? (equal? 'ESCAPE key-pressed))
+  (define action (if (or (eq? 'NONE event)
+                         (eq? 'NONE key-pressed))
+                     'no-turn 'turn))
+  (struct-copy game-state state
+               [input (game-input event key mouse)] [exit exit?] [action action]))
+
+(: update-player (-> GameState GameState))
+(define (update-player state)
+  (define player (game-state-player state))
+  (cond [(equal? 'no-turn (game-state-action state)) state]
+        [(game-object-dead? player) state]
+        [else 
+         (struct-copy game-state (~> player
+                                     (player-handle-input (game-state-input state) state)
+                                     (player-update state))
+                      [fov-recompute? #t])]))
+
+(: update-objects (-> GameState GameState))
+(define (update-objects state)
+  (define (updated? obj) (game-object-turn-taken? obj))
+
+  (: updater (-> GameObject (Listof GameObject) GameState GameState))
+  (define (updater current-object updated-objects latest-state)
+    (cond [(null? current-object) latest-state]
+          [else
+           (define-values (new-object new-state)
+             (~> current-object
+                 (ai-handle-state-transition latest-state)
+                 (ai-update latest-state)))
+           (define objects-to-update
+             (filter-not updated? (game-state-objects new-state)))
+
+           (if (null? objects-to-update)
+               (struct-copy game-state new-state
+                            [objects (cons new-object updated-objects)])
+               (updater (first objects-to-update)
+                     (cons new-object updated-objects)
+                     (struct-copy game-state new-state
+                                  [objects (append updated-objects
+                                                   (rest objects-to-update))])))]))
+
+  (define current-objects (filter-map
+                           (lambda ([obj : GameObject])
+                             (and (game-object-alive? obj)
+                                  (struct-copy game-object obj [turn-taken? #f])))
+                           (game-state-objects state)))
+  (define dead-objects (append (game-state-dead state)
+                               (filter (lambda ([obj : GameObject])
+                                         (game-object-dead? obj))
+                                       (game-state-objects state))))
+  (if (not (eq? 'turn (game-state-action state)))
+      state
+      (updater (first current-objects)
+               '()
+               (struct-copy game-state state
+                            [objects (rest current-objects)]
+                            [dead dead-objects]))))
+
+(: update (-> GameState GameState))
+(define (update state)
+  (~> state
+      update-player
+      update-objects
+      ))
 
 (: render-bar (-> Console Integer Integer Integer String Integer Integer Color Color Void))
 (define (render-bar console x y total-width name value maximum bar-color back-color)
@@ -82,16 +146,41 @@
                     'BKGND_NONE 'CENTER
                     (format "~a: ~a/~a" name value maximum)))
 
-(: get-names-under-mouse (-> Mouse (Listof GameObject) FovMap String))
-(define (get-names-under-mouse mouse objects fov-map)
+(: render-game-object (-> GameObject FovMap Void))
+(define (render-game-object a-object fov-map)
+  (define x (game-object-x a-object))
+  (define y (game-object-y a-object))
+
+  (when (map-is-in-fov fov-map x y)
+    (console-set-default-foreground offscreen-console
+                                    (game-object-color a-object))
+    (console-put-char offscreen-console
+                      x y
+                      (game-object-char a-object)
+                      'BKGND_NONE)))
+
+(: clear (-> Integer Integer FovMap Void))
+(define (clear x y fov-map)
+  (when (map-is-in-fov fov-map x y)
+    (console-put-char offscreen-console x y #\. 'BKGND_NONE)))
+
+(: clear-object-positions (-> GameObject FovMap (Listof GameObject) Void))
+(define (clear-object-positions player fov-map objects)
+  ;(log-debug "Clear old position of objects")
+  (for-each (lambda ([obj : GameObject])
+              (clear (game-object-x obj) (game-object-y obj) fov-map))
+            objects))
+
+(: names-under-mouse (-> GameInput (Listof GameObject) FovMap String))
+(define (names-under-mouse input objects fov-map)
+  (define mouse (game-input-mouse input))
   (define-values (x y) (values (mouse-cx mouse) (mouse-cy mouse)))
   (define names
     (for/fold
         ([ns : (Listof String) '()])
         ([obj objects])
-      (define obj-position (game-object-position obj))
-      (define obj-x (position-x obj-position))
-      (define obj-y (position-y obj-position))
+      (define obj-x (game-object-x obj))
+      (define obj-y (game-object-y obj))
       (if (and (= obj-x x) (= obj-y y)
                (map-is-in-fov fov-map obj-x obj-y))
           (cons (game-object-name obj) ns)
@@ -99,59 +188,64 @@
 
   (string-join names ", "))
 
-(: render-all (-> GameState Console Console GameState))
-(define (render-all state con panel)
-  ;(log-debug "Render screen")
-
+(: render (-> GameState GameState))
+(define (render state)
   (define a-map (game-state-map state))
-
-  ;(log-debug "Draw tiles")
-  (define (is-wall? t) (tile-block-sight t))
-
+  (define fov-map (game-state-fov-map state))
+  (define (visible? [x : Integer] [y : Integer])
+    (map-is-in-fov fov-map x y))
   (define player (game-state-player state))
-  (define player-x (~> player game-object-position position-x))
-  (define player-y (~> player game-object-position position-y))
+  (define player-x (game-object-x player))
+  (define player-y (game-object-y player))
 
-  ;(lob-debug "Compute FoV")
-  (define fov-map (game-state-fov state))
-  (define new-state
-    (cond
-      [(game-state-fov-recompute state)
-       (map-compute-fov fov-map player-x player-y TORCH-RADIUS FOV-LIGHT-WALLS FOV-ALGO)
-       (for ([y MAP-HEIGHT])
-         (for ([x MAP-WIDTH])
-           (let ([is-visible? : Boolean (map-is-in-fov fov-map x y)]
-                  [a-tile : Tile (array-ref a-map `#(,y ,x))])
-             (cond
-               [(not is-visible?)
-                (when (tile-explored a-tile)
-                  (if (is-wall? a-tile)
-                      (console-set-char-background con x y color-dark-wall 'BKGND_SET)
-                      (console-set-char-background con x y color-dark-ground 'BKGND_SET)))]
-               [else
-                (cond
-                  [(is-wall? a-tile)
-                   (console-put-char-ex con x y #\# color-white color-dark-blue)
-                   (console-set-char-background con x y color-light-wall 'BKGND_SET)]
-                  [else
-                   (console-put-char-ex con x y #\. color-white color-dark-blue)
-                   (console-set-char-background con x y color-light-ground 'BKGND_SET)])
-                (set-tile-explored! a-tile #t)]))))
-       (struct-copy game-state state [fov-recompute #f])]
-      [else state]))
+  ;(log-debug "Render tiles")
+  (when (game-state-fov-recompute? state)
+    (map-compute-fov fov-map player-x player-y TORCH-RADIUS FOV-LIGHT-WALLS FOV-ALGO)
+    (clear-object-positions player fov-map (game-state-objects state))
+    (for ([y MAP-HEIGHT])
+      (for ([x MAP-WIDTH])
+        (define a-tile (array-ref a-map `#(,y ,x)))
+        (cond
+          [(not (visible? x y))
+           (when (tile-explored a-tile)
+             (if (tile-wall? a-tile)
+                 (console-put-char-ex offscreen-console
+                                      x y
+                                      #\#
+                                      color-dark-ground
+                                      color-dark-blue)
+                 (console-put-char-ex offscreen-console
+                                      x y
+                                      #\.
+                                      color-dark-ground
+                                      color-dark-blue)))]
+          [else
+           (cond [(tile-wall? a-tile)
+                  (console-put-char-ex offscreen-console
+                                       x y
+                                       #\#
+                                       color-white color-light-wall)]
+                 [else
+                  (console-put-char-ex offscreen-console x y
+                                       #\.
+                                       color-white color-light-ground)])
+           (set-tile-explored! a-tile #t)]))))
 
-  ;(log-debug "Draw dead game objects")
-  (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
-            (game-state-dead new-state))
+  ;(log-debug "Render dead objects")
+  (for-each (lambda ([obj : GameObject]) (render-game-object obj fov-map))
+            (game-state-dead state))
 
-  ;(log-debug "Draw alive game objects")
-  (for-each (lambda ([obj : GameObject]) (draw obj fov-map con))
-            (game-state-objects new-state))
-  (draw player fov-map con)
+  ;(log-debug "Render objects")
+  (for-each (lambda ([obj : GameObject]) (render-game-object obj fov-map))
+            (game-state-objects state))
 
-  ;(log-debug "Render HP status bar")
+  ;(log-debug "Render player")
+  (render-game-object player fov-map)
+
+  ;(log-debug "Render panel components")
   (console-set-default-background panel color-black)
   (console-clear panel)
+
   (define player-fighter (game-object-fighter player))
   (render-bar panel
               1 1
@@ -166,12 +260,12 @@
   (console-print-ex panel
                     1 0
                     'BKGND_NONE 'LEFT
-                    (get-names-under-mouse (game-state-mouse new-state)
-                                           (game-state-objects new-state)
-                                           fov-map))
+                    (names-under-mouse (game-state-input state)
+                                       (game-state-objects state)
+                                       fov-map))
 
   ;(log-debug "Render message log")
-  (define messages (unbox message-log))
+  (define messages (message-log-entries))
   (for ([y (length messages)]
         [m messages])
     ;(log-debug "Render message: ~v in color ~v at ~v" (car m) (cdr m) y)
@@ -180,259 +274,37 @@
 
   (console-blit panel 0 0 SCREEN-WIDTH PANEL-HEIGHT console-root 0 PANEL-Y)
 
-  ;(log-debug "Blit drawing offscreen-console to root-console")
-  (console-blit con 0 0 MAP-WIDTH MAP-HEIGHT console-root 0 0)
+  ;(log-debug "Render to root-console")
+  (console-blit offscreen-console 0 0 MAP-WIDTH MAP-HEIGHT console-root 0 0)
   (console-flush)
 
-  new-state)
-
-(: clear (-> Position Console FovMap Void))
-(define (clear posn con fov-map)
-  (when (map-is-in-fov fov-map (position-x posn) (position-y posn))
-    (console-put-char con
-                      (position-x posn) (position-y posn)
-                      #\.
-                      'BKGND_NONE)))
-
-(: distance-to (-> GameObject GameObject Real))
-(define (distance-to obj other)
-  (define obj-posn (game-object-position obj))
-  (define other-posn (game-object-position other))
-  (define dx (- (position-x other-posn) (position-x obj-posn)))
-  (define dy (- (position-y other-posn) (position-y obj-posn)))
-  (sqrt (+ (sqr dx) (sqr dy))))
-
-(: move-towards (-> GameState GameObject Integer Integer GameObject))
-(define (move-towards state obj target-x target-y)
-  (define posn (game-object-position obj))
-
-  ; vector from obj to target and distance
-  (define dx (- target-x (position-x posn)))
-  (define dy (- target-y (position-y posn)))
-  (define distance (sqrt (+ (sqr dx) (sqr dy))))
-
-  ; normalize vector to length of 1 (preserving direction)
-  ; rounding is done to get an integer that is restricted to the map grid
-  (move state
-        obj
-        (~> dx (/ distance) (cast Real) exact-round)
-        (~> dy (/ distance) (cast Real) exact-round)))
-
-; Produces two new values for the given object and the player
-(: basic-monster-take-turn (-> GameState GameObject (Values GameObject GameObject)))
-(define (basic-monster-take-turn state obj)
-  (define obj-posn (game-object-position obj))
-  (define player (game-state-player state))
-  (define player-posn (game-object-position player))
-
-  (if (not (map-is-in-fov (game-state-fov state)
-                          (position-x obj-posn)
-                          (position-y obj-posn)))
-      (values obj player)
-      (cond [(>= (distance-to obj player) 2)
-             (values (move-towards state
-                                   obj
-                                   (position-x player-posn)
-                                   (position-y player-posn))
-                     player)]
-            [else
-             (values obj (attack state obj player))])))
-
-(: move (-> GameState GameObject Integer Integer GameObject))
-(define (move state obj dx dy)
-  (define current-posn (game-object-position obj))
-  (define-values (x y)
-    (values (+ (position-x current-posn) dx)
-            (+ (position-y current-posn) dy)))
-
-  (cond [(is-blocked? x y (game-state-map state) (game-state-objects state))
-         obj]
-        [else
-         (define new-posn (position x y))
-         ;(log-debug (format "New object position: ~s" new-posn))
-         (struct-copy game-object obj [position new-posn])]))
-
-(: get-move-deltas (-> (Values Integer Integer)))
-(define (get-move-deltas)
-  (cond
-    [(console-is-key-pressed 'UP)
-     (values 0 -1)]
-    [(console-is-key-pressed 'DOWN)
-     (values 0 1)]
-    [(console-is-key-pressed 'LEFT)
-     (values -1 0)]
-    [(console-is-key-pressed 'RIGHT)
-     (values 1 0)]
-    [else (values 0 0)]))
-
-(: attack? (-> GameState Integer Integer (U Boolean GameObject)))
-(define (attack? state dx dy)
-  (define current-posn (~> state game-state-player game-object-position))
-  (define-values (x y)
-    (values (+ (position-x current-posn) dx)
-            (+ (position-y current-posn) dy)))
-
-  (for/or : (U GameObject Boolean) ([o : GameObject (game-state-objects state)])
-    (define obj-posn (game-object-position o))
-    (if (and (= x (position-x obj-posn))
-             (= y (position-y obj-posn))
-             (not (null? (game-object-fighter o))))
-        o
-        #f)))
-
-(: take-damage (-> GameObject Integer GameObject))
-(define (take-damage obj damage)
-  (define a-fighter (game-object-fighter obj))
-  ; This is a good place where lenses would make things better
-  (define new-fighter (struct-copy fighter
-                                   a-fighter
-                                   [hp (- (fighter-hp a-fighter)
-                                          damage)]))
-  (define new-obj-w-fighter (struct-copy game-object obj [fighter new-fighter]))
-  (if (<= (fighter-hp new-fighter) 0)
-      ((fighter-die-proc new-fighter) new-obj-w-fighter)
-      new-obj-w-fighter))
-
-; returns the attacked target
-(: attack (-> GameState GameObject GameObject GameObject))
-(define (attack state attacker target)
-  (define attacker-fighter (game-object-fighter attacker))
-  (define target-fighter (game-object-fighter target))
-  (define damage (- (fighter-power (cast attacker-fighter Fighter))
-                    (fighter-defense (cast target-fighter Fighter))))
-
-  (cond [(> damage 0)
-         (message-add (format "~s attacks ~s for ~v hit points."
-                              (game-object-name attacker)
-                              (game-object-name target)
-                              damage))
-         (take-damage target damage)]
-        [else
-         (message-add (format "~s attacks ~s but is has no effect!"
-                       (game-object-name attacker)
-                       (game-object-name target)))
-         target]))
-
-(: player-move-or-attack (-> GameState GameObject GameState))
-(define (player-move-or-attack state player)
-  (define-values (dx dy) (get-move-deltas))
-  (define target (attack? state dx dy))
-  (cond [(game-object? target)
-         (struct-copy game-state
-                      state
-                      [objects (for/list : (Listof GameObject)
-                                   ([obj : GameObject (game-state-objects state)])
-                                 (if (equal? obj target)
-                                     (attack state player target)
-                                     obj))])]
-        [else (struct-copy game-state
-                           state
-                           [fov-recompute #t]
-                           [player (move state player dx dy)])]))
-
-(: handle-keys (-> GameState GameState))
-(define (handle-keys state)
-  ;;(define-values (event key mouse) (sys-wait-for-event 'KEY #t))
-  (define key (game-state-key state))
-  (define vk (key-vk key))
-
-  ;(log-debug (format "KEY EVENT: ~s - ~s" vk (key-c key)))
-
-  (cond
-    [(equal? vk 'ESCAPE)
-     (struct-copy game-state state [exit #t] [action 'exit])]
-    [(and (eq? 'playing (game-state-mode state))
-          (member vk '(UP DOWN LEFT RIGHT)))
-     (struct-copy game-state
-                  (player-move-or-attack state (game-state-player state))
-                  [action 'turn])]
-    [else (struct-copy game-state state [action 'no-turn])]))
-
-(: clear-object-positions (-> GameState GameState))
-(define (clear-object-positions state)
-  ;(log-debug "Clear old position of objects")
-  (define player (game-state-player state))
-  (define fov-map (game-state-fov state))
-  (for-each (lambda ([obj : GameObject])
-              (clear (game-object-position obj) offscreen-console fov-map))
-            (cons player (game-state-objects state)))
-
-  state)
-
-(: objects-take-turn (-> GameState GameState))
-(define (objects-take-turn state)
-  (cond [(and (eq? 'playing (game-state-mode state))
-              (eq? 'turn (game-state-action state)))
-         (define-values (new-state new-objs)
-           (for/fold
-               ([latest-state : GameState state]
-                [latest-objs : (Listof GameObject) '()])
-               ([current-obj (game-state-objects state)])
-             (cond [(null? (game-object-ai current-obj))
-                    (values state (cons current-obj latest-objs))]
-                   [else
-                    (define-values (latest-obj latest-player)
-                      (basic-monster-take-turn latest-state current-obj))
-                    (values (struct-copy game-state state [player latest-player])
-                            (cons latest-obj latest-objs))])))
-         (struct-copy game-state new-state [objects new-objs])]
-        [else state]))
-
-(: filter-objects (-> GameState GameState))
-(define (filter-objects state)
-  (define-values (alive-objs dead-objs)
-    (for/fold ([as : (Listof GameObject) '()]
-               [ds : (Listof GameObject) (game-state-dead state)])
-              ([o (game-state-objects state)])
-      (cond [(null? o) (values as ds)]
-            [(alive? o) (values (cons o as) ds)]
-            [(dead? o) (values as (cons o ds))]
-            [else (values as ds)])))
-  (struct-copy game-state state [objects alive-objs] [dead dead-objs]))
-
-(: wait-for-event (-> GameState GameState))
-(define (wait-for-event state)
-  (define-values (event key mouse) (sys-wait-for-event 'KEY_PRESS_MOUSE_MOVE
-                                                       #t))
-  (struct-copy game-state
-               state [event event] [key key] [mouse mouse]))
+  (struct-copy game-state state [fov-recompute? #f]))
 
 (: game-loop (-> GameState Void))
 (define (game-loop state)
   (unless (console-is-window-closed)
     (define new-state
       (~> state
-          (render-all offscreen-console panel)
-          wait-for-event
-          clear-object-positions
-          handle-keys
-          objects-take-turn
-          filter-objects))
+          process-input
+          update
+          render
+          ))
 
-    (game-loop (if (game-state-exit new-state)
-                   (exit)
-                   new-state))))
+    (if (game-state-exit new-state)
+        (exit)
+        (game-loop new-state))))
 
-(log-debug "Set window title")
-(console-set-window-title "Testerlie")
-
-(log-debug "Start game loop")
+;(log-debug "Initialize game")
+(sys-set-fps 60)
 (define initial-game-state
-  (let-values ([(a-map objs player-start-position) (make-map)])
-    (log-debug "Initialize FoV map")
-    (define fov-map (map-new MAP-WIDTH MAP-HEIGHT))
-    (for ([y MAP-HEIGHT])
-      (for ([x MAP-WIDTH])
-        (let ([t : Tile (array-ref a-map `#(,y ,x))])
-          (map-set-properties fov-map
-                              x y
-                              (not (tile-block-sight t)) (not (tile-blocked t))))))
+  (let-values ([(a-map objects player-start-position) (make-map)])
+    (define player (make-player (car player-start-position)
+                                (cdr player-start-position)
+                                "namra"))
+    (define fov-map (make-fov-map MAP-WIDTH MAP-HEIGHT a-map))
+    (make-game-state player objects a-map fov-map)))
 
-    (make-game-state
-     (struct-copy game-object default-player [position player-start-position])
-     objs
-     a-map fov-map)))
-
+;(log-debug "Enter game loop")
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."
              #:color color-red)
 (game-loop initial-game-state)

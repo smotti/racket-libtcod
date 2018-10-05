@@ -1,18 +1,35 @@
 #lang typed/racket
 
+(provide make-fov-map
+         make-map
+         Map
+         MAP-WIDTH
+         MAP-HEIGHT
+         (struct-out tile)
+         tile-blocked?
+         tile-wall?
+         )
+
 (require math/array
 
          "../../color.rkt"
-         "game-types.rkt")
+         "../../fov.rkt"
+
+         "ai-types.rkt"
+         "monster.rkt"
+         "types.rkt"
+         )
 
 (require/typed "../../random.rkt"
   [random-default-get-int (-> Integer Integer Integer)])
 
-(provide is-blocked?
-         make-map
-         MAP-WIDTH
-         MAP-HEIGHT
-         )
+
+;;;
+;;; Map tile
+;;;
+
+(define (make-tile blocked block-sight explored)
+  (tile blocked block-sight explored))
 
 ;;;
 ;;; Constants
@@ -70,23 +87,25 @@
 ;;; Helpers
 ;;;
 
-(: is-blocked? (-> Integer Integer (Array Tile) (Listof GameObject) Boolean))
-(define (is-blocked? x y a-map objs)
+(: tile-blocked? (-> Integer Integer Map (Listof GameObject) Boolean))
+(define (tile-blocked? x y a-map objs)
   (define a-tile (array-ref a-map `#(,y ,x)))
 
   (cond
     [(tile-blocked a-tile) #t]
     [else (for/or ([o objs])
-            (define o-posn (game-object-position o))
-            (and (game-object-blocks? o)
-                 (= (position-x o-posn) x)
-                 (= (position-y o-posn) y)))]))
+            (and (game-object-blocks o)
+                 (= (game-object-x o) x)
+                 (= (game-object-y o) y)))]))
+
+(define (tile-wall? a-tile)
+  (tile-block-sight a-tile))
 
 ;;;
 ;;; Rooms
 ;;;
 
-(: create-room (-> Rectangle (Array Tile) Void))
+(: create-room (-> Rectangle Map Void))
 (define (create-room shape a-map)
   (for ([x (in-range (add1 (rectangle-x1 shape))
                      (rectangle-x2 shape))])
@@ -97,7 +116,7 @@
       (set-tile-blocked! t #f)
       (set-tile-block-sight! t #f))))
 
-(: create-h-tunnel (-> Integer Integer Integer (Array Tile) Void))
+(: create-h-tunnel (-> Integer Integer Integer Map Void))
 (define (create-h-tunnel x1 x2 y a-map)
   (for ([x (in-range (min x1 x2) (add1 (max x1 x2)))])
     (: t Tile)
@@ -105,7 +124,7 @@
     (set-tile-blocked! t #f)
     (set-tile-block-sight! t #f)))
 
-(: create-v-tunnel (-> Integer Integer Integer (Array Tile) Void))
+(: create-v-tunnel (-> Integer Integer Integer Map Void))
 (define (create-v-tunnel y1 y2 x a-map)
   (for ([y (in-range (min y1 y2) (add1 (max y1 y2)))])
     (: t Tile)
@@ -113,9 +132,10 @@
     (set-tile-blocked! t #f)
     (set-tile-block-sight! t #f)))
 
-(: place-objects (-> RectangleRoom (Array Tile) (Listof GameObject)))
+(: place-objects (-> RectangleRoom Map (Listof GameObject)))
 (define (place-objects room a-map)
-  (define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
+  ;(define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
+  (define num-monsters 1)
 
   (: accumulate-objects (-> (Listof GameObject) Integer (Listof GameObject)))
   (define (accumulate-objects objs counter)
@@ -124,40 +144,42 @@
 
     (cond
       [(= counter num-monsters) objs]
-      [(is-blocked? x y a-map objs)
+      [(tile-blocked? x y a-map objs)
        (accumulate-objects objs counter)]
       [else
        (define choice (random-default-get-int 0 100))
        (cond
          [(< choice 80)
-          (define new-obj (make-game-object (make-position x y)
-                                           #\o 
-                                           color-desaturated-green
-                                           'monster
-                                           "Orc"
-                                           'alive
-                                           #:blocks? #t
-                                           #:fighter (make-fighter
-                                                      #:hp 10
-                                                      #:defense 0
-                                                      #:power 3
-                                                      #:die-proc die-monster)
-                                           #:ai (make-basic-monster)))
+          (define new-obj (make-game-object x y
+                                            #\o 
+                                            'monster
+                                            "Orc"
+                                            'ideling
+                                            0 0
+                                            color-desaturated-green
+                                            #:blocks #t
+                                            #:fighter (make-fighter
+                                                       #:hp 10
+                                                       #:defense 0
+                                                       #:power 3
+                                                       #:die monster-die)
+                                            #:ai (make-monster-ai #t #t)))
           (accumulate-objects (cons new-obj objs) (add1 counter))]
          [else
-          (define new-obj (make-game-object (make-position x y)
+          (define new-obj (make-game-object x y
                                             #\T
-                                            color-darker-green
                                             'monster
                                             "Troll"
-                                            'alive
-                                            #:blocks? #t
+                                            'ideling
+                                            0 0
+                                            color-darker-green
+                                            #:blocks #t
                                             #:fighter (make-fighter
                                                        #:hp 16
                                                        #:defense 1
                                                        #:power 4
-                                                       #:die-proc die-monster)
-                                            #:ai (make-basic-monster)))
+                                                       #:die monster-die)
+                                            #:ai (make-monster-ai #t #t)))
           (accumulate-objects (cons new-obj objs) (add1 counter))])]))
 
   (accumulate-objects '() 0))
@@ -166,7 +188,7 @@
 ;;; Map
 ;;;
 
-(: make-map (-> (Values (Array Tile) (Listof GameObject) Position)))
+(: make-map (-> (Values Map (Listof GameObject) (Pairof Integer Integer))))
 (define (make-map)
   (define a-map (build-array `#(,MAP-HEIGHT ,MAP-WIDTH)
                            (lambda (is)
@@ -182,7 +204,7 @@
   (define first-room (make-new-room))
   (define player-start-position
     (let-values ([(x y) (center first-room)])
-      (position x y)))
+      (cons x y)))
 
   (: does-intersect? (-> (Listof RectangleRoom) RectangleRoom Boolean))
   (define (does-intersect? rooms new-room)
@@ -213,7 +235,10 @@
            [else (create-v-tunnel prev-y new-y prev-x a-map)
                  (create-h-tunnel prev-x new-x new-y a-map)]))
        (make-rooms (cons new-room rooms)
-                   (append (place-objects new-room a-map) objs)
+                   (append (if (= 0 no-of-rooms)
+                               '()  ; No monsters in players starting room
+                               (place-objects new-room a-map))
+                           objs)
                    (make-new-room)
                    (add1 no-of-rooms))]))
 
@@ -221,3 +246,14 @@
   (log-debug "Created map")
 
   (values a-map objs player-start-position))
+
+(: make-fov-map (-> Integer Integer Map FovMap))
+(define (make-fov-map w h a-map)
+  (define fov-map (map-new MAP-WIDTH MAP-HEIGHT))
+  (for ([y MAP-HEIGHT])
+    (for ([x MAP-WIDTH])
+      (let ([t : Tile (array-ref a-map `#(,y ,x))])
+        (map-set-properties fov-map
+                            x y
+                            (not (tile-block-sight t)) (not (tile-blocked t))))))
+  fov-map)

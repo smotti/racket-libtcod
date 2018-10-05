@@ -2,7 +2,10 @@
 
 (module ffi-sys racket
   (provide event?
-           sys-wait-for-event)
+           sys-check-for-event
+           sys-set-fps
+           sys-wait-for-event
+           )
 
   (require ffi/unsafe
 
@@ -15,7 +18,8 @@
   ;;;
 
   (define event-symbols
-    (list 'KEY_PRESS
+    (list 'NONE
+          'KEY_PRESS
           'KEY_RELEASE
           'KEY
           'MOUSE_MOVE
@@ -26,9 +30,11 @@
           'ANY))
 
   (define (event? event)
-    (member event event-symbols))
+    (define result (member event event-symbols))
+    (if (false? result) result #t))
 
-  (define _event (_enum '(KEY_PRESS = 1
+  (define _event (_enum '(NONE = 0
+                          KEY_PRESS = 1
                           KEY_RELEASE = 2
                           KEY = 3
                           MOUSE_MOVE = 4
@@ -42,6 +48,15 @@
   ;;; Event Handling
   ;;;
 
+  (define-tcod sys-check-for-event
+    (_fun _event [k : (_ptr o _key)] [m : (_ptr o _mouse)]
+          -> (e : _event) -> (values e k m))
+    #:c-id TCOD_sys_check_for_event)
+
+  (define-tcod sys-set-fps
+    (_fun _int -> _void)
+    #:c-id TCOD_sys_set_fps)
+
   (define-tcod sys-wait-for-event
     (_fun _event [k : (_ptr o _key)] [m : (_ptr o _mouse)] _bool
           -> (e : _event) -> (values e k m))
@@ -52,5 +67,7 @@
          "mouse.rkt")
 (require/typed/provide 'ffi-sys
   [#:opaque Event event?]
+  [sys-check-for-event (-> Symbol (Values Symbol Key Mouse))]
+  [sys-set-fps (-> Integer Void)]
   [sys-wait-for-event (-> Symbol Boolean (Values Symbol Key Mouse))]
   )
