@@ -1,10 +1,10 @@
-#lang typed/racket
+#lang racket
 
 (provide ai-handle-state-transition
          ai-update
          make-monster-ai
          (struct-out monster-ai)
-         MonsterAI)
+         )
 
 (require racket/format
          threading
@@ -21,23 +21,21 @@
          )
 
 
-(: distance-to (-> GameObject GameObject Real))
 (define (distance-to from to)
   (define dx (- (game-object-x to) (game-object-x from)))
   (define dy (- (game-object-y to) (game-object-y from)))
   (sqrt (+ (sqr dx) (sqr dy))))
 
-(: move-towards (-> GameObject Integer Integer GameState GameObject))
 (define (move-towards object x y state)
   ; vector from obj to target and distance
   (define dx (- x (game-object-x object)))
   (define dy (- y (game-object-y object)))
   (define distance (sqrt (+ (sqr dx) (sqr dy))))
 ;  (log-debug "dx: ~v - dy: ~v - distance: ~v" dx dy distance)
-  (define ddx (~> dx (/ distance) (cast Real) exact-round))
-  (define ddy (~> dy (/ distance) (cast Real) exact-round))
+  (define ddx (~> dx (/ distance) exact-round))
+  (define ddy (~> dy (/ distance) exact-round))
 
-  (if (tile-blocked? (+ (game-object-x object) ddx)
+  (if (tile-is-blocked? (+ (game-object-x object) ddx)
                      (+ (game-object-y object) ddy)
                      (game-state-map state)
                      (game-state-objects state))
@@ -46,22 +44,19 @@
       ; rounding is done to get an integer that is restricted to the map grid
       (game-object-move object #:dx ddx #:dy ddy)))
 
-(: ai-handle-state-transition (-> GameObject GameState GameObject))
 (define (ai-handle-state-transition object state)
   (define object-ai (game-object-ai object))
   (cond [(monster-ai? object-ai)
          (monster-ai-handle-state-transition object state)]
         [else object]))
 
-(: ai-update (-> GameObject GameState (Values GameObject GameState)))
 (define (ai-update object state)
   (define object-ai (game-object-ai object))
   (cond [(monster-ai? object-ai) (monster-ai-update object state)]
         [else (values object state)]))
 
-(: monster-ai-handle-state-transition (-> GameObject GameState GameObject))
 (define (monster-ai-handle-state-transition object state)
-  (define object-ai (cast (game-object-ai object) MonsterAI))
+  (define object-ai (game-object-ai object))
   (define object-state (game-object-state object))
   (define player (game-state-player state))
   (define in-fov? (map-is-in-fov (game-state-fov-map state)
@@ -89,7 +84,6 @@
              (struct-copy game-object object [state 'chasing])]
             [else object])))
 
-(: monster-ai-update (-> GameObject GameState (Values GameObject GameState)))
 (define (monster-ai-update object state)
   (define object-ai (game-object-ai object))
   (define object-state (game-object-state object))
@@ -117,7 +111,7 @@
 ;                    (game-object-x object) (game-object-y object))
 ;         (log-debug "Attack player at: ~v ~v"
 ;                    (game-object-x player) (game-object-y player))
-         (define object-fighter (cast (game-object-fighter object) Fighter))
+         (define object-fighter (game-object-fighter object))
          (define new-player-object (fighter-attack-target object player))
          (values (struct-copy game-object object [turn-taken? #t])
                  (struct-copy game-state state [player new-player-object]))]

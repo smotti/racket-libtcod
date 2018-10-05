@@ -1,35 +1,29 @@
-#lang typed/racket
+#lang racket
 
 (provide make-fov-map
          make-map
-         Map
+         map-ref
          MAP-WIDTH
          MAP-HEIGHT
-         (struct-out tile)
-         tile-blocked?
+         tile-is-blocked?
          tile-wall?
          )
 
-(require math/array
+(require threading
 
          "../../color.rkt"
          "../../fov.rkt"
+         "../../random.rkt"
 
          "ai-types.rkt"
          "monster.rkt"
-         "types.rkt"
-         )
-
-(require/typed "../../random.rkt"
-  [random-default-get-int (-> Integer Integer Integer)])
-
-
+         "types.rkt")
 ;;;
 ;;; Map tile
 ;;;
 
-(define (make-tile blocked block-sight explored)
-  (tile blocked block-sight explored))
+(define (make-tile blocked? block-sight explored?)
+  (tile blocked? block-sight explored?))
 
 ;;;
 ;;; Constants
@@ -49,19 +43,11 @@
 ;;; Rectangle
 ;;;
 
-(struct rectangle ([x1 : Integer] [y1 : Integer]
-                                  [x2 : Integer] [y2 : Integer]
-                                  [w : Integer] [h : Integer]))
-(define-type Rectangle rectangle)
-(define-type RectangleRoom rectangle)
+(struct rectangle (x1 y1 x2 y2 w h))
 
-(: make-rectangle (-> Integer Integer Integer Integer Rectangle))
 (define (make-rectangle x y w h)
-  (rectangle x y
-             (+ x w) (+ y h)
-             w h))
+  (rectangle x y (+ x w) (+ y h) w h))
 
-(: center (-> RectangleRoom (Values Integer Integer)))
 (define (center room)
   (let ([x1 (rectangle-x1 room)]
         [x2 (rectangle-x2 room)]
@@ -70,7 +56,6 @@
     (values (floor (/ (+ x1 x2) 2))
             (floor (/ (+ y1 y2) 2)))))
 
-(: intersect (-> RectangleRoom RectangleRoom Boolean))
 (define (intersect r1 r2)
   (let ([r1-x1 (rectangle-x1 r1)]
         [r1-x2 (rectangle-x2 r1)]
@@ -87,12 +72,16 @@
 ;;; Helpers
 ;;;
 
-(: tile-blocked? (-> Integer Integer Map (Listof GameObject) Boolean))
-(define (tile-blocked? x y a-map objs)
-  (define a-tile (array-ref a-map `#(,y ,x)))
+(define (map-ref a-map x y)
+  (~> a-map
+      (vector-ref y)
+      (vector-ref x)))
+
+(define (tile-is-blocked? x y a-map objs)
+  (define a-tile (map-ref a-map x y))
 
   (cond
-    [(tile-blocked a-tile) #t]
+    [(tile-blocked? a-tile) #t]
     [else (for/or ([o objs])
             (and (game-object-blocks o)
                  (= (game-object-x o) x)
@@ -105,46 +94,38 @@
 ;;; Rooms
 ;;;
 
-(: create-room (-> Rectangle Map Void))
 (define (create-room shape a-map)
   (for ([x (in-range (add1 (rectangle-x1 shape))
                      (rectangle-x2 shape))])
     (for ([y (in-range (add1 (rectangle-y1 shape))
                        (rectangle-y2 shape))])
-      (: t Tile)
-      (define t (array-ref a-map `#(,y ,x)))
-      (set-tile-blocked! t #f)
+      (define t (map-ref a-map x y))
+      (set-tile-blocked?! t #f)
       (set-tile-block-sight! t #f))))
 
-(: create-h-tunnel (-> Integer Integer Integer Map Void))
 (define (create-h-tunnel x1 x2 y a-map)
   (for ([x (in-range (min x1 x2) (add1 (max x1 x2)))])
-    (: t Tile)
-    (define t (array-ref a-map `#(,y ,x)))
-    (set-tile-blocked! t #f)
+    (define t (map-ref a-map x y))
+    (set-tile-blocked?! t #f)
     (set-tile-block-sight! t #f)))
 
-(: create-v-tunnel (-> Integer Integer Integer Map Void))
 (define (create-v-tunnel y1 y2 x a-map)
   (for ([y (in-range (min y1 y2) (add1 (max y1 y2)))])
-    (: t Tile)
-    (define t (array-ref a-map `#(,y ,x)))
-    (set-tile-blocked! t #f)
+    (define t (map-ref a-map x y))
+    (set-tile-blocked?! t #f)
     (set-tile-block-sight! t #f)))
 
-(: place-objects (-> RectangleRoom Map (Listof GameObject)))
 (define (place-objects room a-map)
   ;(define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
   (define num-monsters 1)
 
-  (: accumulate-objects (-> (Listof GameObject) Integer (Listof GameObject)))
   (define (accumulate-objects objs counter)
     (define x (random-default-get-int (rectangle-x1 room) (rectangle-x2 room)))
     (define y (random-default-get-int (rectangle-y1 room) (rectangle-y2 room)))
 
     (cond
       [(= counter num-monsters) objs]
-      [(tile-blocked? x y a-map objs)
+      [(tile-is-blocked? x y a-map objs)
        (accumulate-objects objs counter)]
       [else
        (define choice (random-default-get-int 0 100))
@@ -188,11 +169,13 @@
 ;;; Map
 ;;;
 
-(: make-map (-> (Values Map (Listof GameObject) (Pairof Integer Integer))))
 (define (make-map)
-  (define a-map (build-array `#(,MAP-HEIGHT ,MAP-WIDTH)
-                           (lambda (is)
-                             (make-tile #t #t #f))))
+  (define a-map
+    (vector->immutable-vector
+     (for/vector ([y MAP-HEIGHT])
+       (vector->immutable-vector
+        (for/vector ([x MAP-WIDTH])
+          (make-tile #t #t #f))))))
 
   (define (make-new-room)
     (define w (random-default-get-int ROOM-MIN-SIZE ROOM-MAX-SIZE))
@@ -206,25 +189,21 @@
     (let-values ([(x y) (center first-room)])
       (cons x y)))
 
-  (: does-intersect? (-> (Listof RectangleRoom) RectangleRoom Boolean))
   (define (does-intersect? rooms new-room)
-    (for/or : Boolean ([room rooms])
-      (intersect new-room room)))
+    (for/or ([room rooms]) (intersect new-room room)))
 
-  (: make-rooms (-> (Listof RectangleRoom) (Listof GameObject) RectangleRoom Integer
-                    (Values (Listof RectangleRoom) (Listof GameObject))))
   (define (make-rooms rooms objs new-room no-of-rooms)
     (cond
       [(= MAX-ROOMS no-of-rooms) (values rooms objs)]
       [(does-intersect? rooms new-room)
-       (log-debug "New room intersects with existing room!")
+;       (log-debug "New room intersects with existing room!")
        (make-rooms rooms objs (make-new-room) no-of-rooms)]
       [else
-       (log-debug "Create new room")
+;       (log-debug "Create new room")
        (create-room new-room a-map)
 
        (define-values (new-x new-y) (center new-room))
-       (log-debug "Connect new room to existing rooms")
+;       (log-debug "Connect new room to existing rooms")
 
        (when (> no-of-rooms 0)
          (define-values (prev-x prev-y) (center (first rooms)))
@@ -247,13 +226,12 @@
 
   (values a-map objs player-start-position))
 
-(: make-fov-map (-> Integer Integer Map FovMap))
 (define (make-fov-map w h a-map)
   (define fov-map (map-new MAP-WIDTH MAP-HEIGHT))
   (for ([y MAP-HEIGHT])
     (for ([x MAP-WIDTH])
-      (let ([t : Tile (array-ref a-map `#(,y ,x))])
+      (let ([t (map-ref a-map x y)])
         (map-set-properties fov-map
                             x y
-                            (not (tile-block-sight t)) (not (tile-blocked t))))))
+                            (not (tile-block-sight t)) (not (tile-blocked? t))))))
   fov-map)

@@ -1,4 +1,4 @@
-#lang typed/racket
+#lang racket
 
 (provide make-player
          player-die
@@ -19,7 +19,6 @@
          "utils.rkt"
          )
 
-(: player-die (-> GameObject GameObject))
 (define (player-die obj)
   (message-add "You died!" #:color color-red)
   (struct-copy game-object
@@ -27,7 +26,6 @@
                [char #\%] [color color-dark-red]
                [alive? #f]))
 
-(: make-player (-> Integer Integer String GameObject))
 (define (make-player x y name)
   (make-game-object x y
                     #\@ 'player
@@ -38,7 +36,6 @@
                                             #:power 5
                                             #:die player-die)))
 
-(: player-handle-input (-> GameObject GameInput GameState GameObject))
 (define (player-handle-input player input state)
   (define-values (dx dy) (input-move-deltas (key-vk (game-input-key input))))
   (define player-x (game-object-x player))
@@ -60,22 +57,19 @@
                       [fighter new-player-fighter]
                       [state 'attacking])]
         [else
-         (if (tile-blocked? move-to-x move-to-y (game-state-map state) objects)
+         (if (tile-is-blocked? move-to-x move-to-y (game-state-map state) objects)
              (struct-copy game-object player [state 'ideling])
              (struct-copy game-object player
                           [dx dx] [dy dy] [state 'moving]))]))
 
-(: player-update (-> GameObject GameState GameState))
 (define (player-update player state)
   (define player-state (game-object-state player))
   ;(log-debug (format "Player state: ~v" player-state))
   (cond [(eq? 'attacking player-state)
-         (define player-fighter (cast (game-object-fighter player) Fighter))
+         (define player-fighter (game-object-fighter player))
          (define attacked-object
-           (fighter-attack-target player (cast (fighter-target player-fighter)
-                                               GameObject)))
-         (define new-objects (for/list : (Listof GameObject)
-                                 ([obj : GameObject (game-state-objects state)])
+           (fighter-attack-target player (fighter-target player-fighter)))
+         (define new-objects (for/list ([obj (game-state-objects state)])
                                (if (equal? obj (fighter-target player-fighter))
                                    attacked-object
                                    obj)))

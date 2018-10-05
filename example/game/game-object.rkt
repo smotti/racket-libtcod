@@ -1,4 +1,4 @@
-#lang typed/racket
+#lang racket
 
 (provide game-object-dead?
          game-object-die
@@ -14,11 +14,9 @@
          "types.rkt"
          )
 
-(: game-object-dead? (-> GameObject Boolean))
 (define (game-object-dead? obj)
   (not (game-object-alive? obj)))
 
-(: game-object-die (-> GameObject GameObject))
 (define (game-object-die obj)
   (message-add (format "~s is dead!" (game-object-name obj))
                #:color color-orange)
@@ -30,7 +28,6 @@
                              (game-object-name obj))]
                [state 'dead]))
 
-(: game-object-move (-> GameObject (#:dx Integer) (#:dy Integer) GameObject))
 (define (game-object-move object
                           #:dx [dx (game-object-dx object)]
                           #:dy [dy (game-object-dy object)])

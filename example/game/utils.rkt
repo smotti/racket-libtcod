@@ -1,10 +1,9 @@
-#lang typed/racket
+#lang racket
 
 (provide input-move-deltas)
 
 (require "../../console.rkt")
 
-(: input-move-deltas (-> Symbol (Values Integer Integer)))
 (define (input-move-deltas a-key)
   (cond [(eq? a-key 'UP) (values 0 -1)]
         [(eq? a-key 'DOWN) (values 0 1)]

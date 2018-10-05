@@ -1,4 +1,4 @@
-#lang typed/racket
+#lang racket
 
 (provide monster-die)
 
@@ -9,7 +9,6 @@
          "message-log.rkt"
          "types.rkt")
 
-(: monster-die (-> GameObject GameObject))
 (define (monster-die object)
   (message-add (format "~a is dead!" (game-object-name object)))
   (struct-copy game-object object
