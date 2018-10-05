@@ -64,6 +64,12 @@
 (define (monster-ideling? a-monster)
   (eq? 'ideling (entity-state a-monster)))
 
+(define (monster-in-attack-range? a-monster player)
+  (<= (exact-round (distance-to a-monster player)) 1))
+
+(define (monster-not-in-attack-range? a-monster player)
+  (>= (exact-round (distance-to a-monster player)) 2))
+
 (define (monster-ai-handle-state-transition a-monster state)
   (define player (game-state-player state))
   (define in-fov? (map-is-in-fov (game-state-fov-map state)
@@ -77,18 +83,18 @@
           (entity-set-state a-monster 'ideling))
       (cond [(and (monster-ideling? a-monster)
                   in-fov?
-                  (>= (exact-round (distance-to a-monster player)) 2))
+                  (monster-not-in-attack-range? a-monster player))
              (entity-set-state a-monster 'chasing)]
             [(and (or (monster-chasing? a-monster) (monster-attacking? a-monster))
                   not-in-fov?)
              (entity-set-state a-monster 'ideling)]
             [(and (or (monster-ideling? a-monster) (monster-chasing? a-monster))
                   in-fov?
-                  (<= (exact-round (distance-to a-monster player)) 1))
+                  (monster-in-attack-range? a-monster player))
              (entity-set-state a-monster 'attacking)]
             [(and (monster-attacking? a-monster)
                   in-fov?
-                  (>= (exact-round (distance-to a-monster player)) 2))
+                  (monster-not-in-attack-range? a-monster player))
              (entity-set-state a-monster 'chasing)]
             [else a-monster])))
 
