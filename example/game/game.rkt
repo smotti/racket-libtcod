@@ -95,10 +95,10 @@
                (struct-copy game-state new-state
                             [entities (cons new-entity updated-entities)])
                (updater (first entities-to-update)
-                     (cons new-entity updated-entities)
-                     (struct-copy game-state new-state
-                                  [entities (append updated-entities
-                                                    (rest entities-to-update))])))]))
+                        (cons new-entity updated-entities)
+                        (struct-copy game-state new-state
+                                     [entities (append updated-entities
+                                                       (rest entities-to-update))])))]))
 
   (define current-entities
     (filter-map (lambda (enty) (and (entity-alive? enty)

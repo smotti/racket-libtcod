@@ -3,6 +3,7 @@
 (provide entity-dead?
          entity-die
          entity-move
+         entity-set-state
          make-entity)
 
 (require "../../color.rkt"
@@ -35,3 +36,6 @@
                                      (+ (entity-y an-entity) dy)))
   (struct-copy entity an-entity
                [x to-x] [y to-y] [dx 0] [dy 0]))
+
+(define (entity-set-state an-entity new-state)
+  (struct-copy entity an-entity [state new-state]))

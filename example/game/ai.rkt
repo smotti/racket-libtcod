@@ -55,67 +55,73 @@
   (cond [(monster-ai? an-entity-ai) (monster-ai-update an-entity state)]
         [else (values an-entity state)]))
 
-(define (monster-ai-handle-state-transition an-entity state)
-  (define an-entity-ai (entity-ai an-entity))
-  (define an-entity-state (entity-state an-entity))
+(define (monster-attacking? a-monster)
+  (eq? 'attacking (entity-state a-monster)))
+
+(define (monster-chasing? a-monster)
+  (eq? 'chasing (entity-state a-monster)))
+
+(define (monster-ideling? a-monster)
+  (eq? 'ideling (entity-state a-monster)))
+
+(define (monster-ai-handle-state-transition a-monster state)
   (define player (game-state-player state))
   (define in-fov? (map-is-in-fov (game-state-fov-map state)
-                                 (entity-x an-entity) (entity-y an-entity)))
+                                 (entity-x a-monster) (entity-y a-monster)))
   (define not-in-fov? (not in-fov?))
-;  (log-debug "Distance to player: ~v" (distance-to an-entity player))
+;  (log-debug "Distance to player: ~v" (distance-to a-monster player))
   ; TODO: Pull out a procedure to set a new state for a given an-entity
   (if (entity-dead? player)
-      (if (eq? 'ideling an-entity-state)
-          an-entity
-          (struct-copy entity an-entity [state 'ideling]))
-      (cond [(and (eq? 'ideling an-entity-state)
+      (if (monster-ideling? a-monster)
+          a-monster
+          (entity-set-state a-monster 'ideling))
+      (cond [(and (monster-ideling? a-monster)
                   in-fov?
-                  (>= (exact-round (distance-to an-entity player)) 2))
-             (struct-copy entity an-entity [state 'chasing])]
-            [(and (or (eq? 'chasing an-entity-state) (eq? 'attacking an-entity-state))
+                  (>= (exact-round (distance-to a-monster player)) 2))
+             (entity-set-state a-monster 'chasing)]
+            [(and (or (monster-chasing? a-monster) (monster-attacking? a-monster))
                   not-in-fov?)
-             (struct-copy entity an-entity [state 'ideling])]
-            [(and (or (eq? 'ideling an-entity-state) (eq? 'chasing an-entity-state))
+             (entity-set-state a-monster 'ideling)]
+            [(and (or (monster-ideling? a-monster) (monster-chasing? a-monster))
                   in-fov?
-                  (<= (exact-round (distance-to an-entity player)) 1))
-             (struct-copy entity an-entity [state 'attacking] )]
-            [(and (eq? 'attacking an-entity-state)
+                  (<= (exact-round (distance-to a-monster player)) 1))
+             (entity-set-state a-monster 'attacking)]
+            [(and (monster-attacking? a-monster)
                   in-fov?
-                  (>= (exact-round (distance-to an-entity player)) 2))
-             (struct-copy entity an-entity [state 'chasing])]
-            [else an-entity])))
+                  (>= (exact-round (distance-to a-monster player)) 2))
+             (entity-set-state a-monster 'chasing)]
+            [else a-monster])))
 
-(define (monster-ai-update an-entity state)
-  (define an-entity-ai (entity-ai an-entity))
-  (define an-entity-state (entity-state an-entity))
+(define (monster-ai-update a-monster state)
   (define player (game-state-player state))
-  (cond [(eq? 'idleing an-entity-state)
-         (define an-entity-fighter (entity-fighter an-entity))
-         (if (not (fighter? an-entity-fighter))
-             (values an-entity state)
+  (cond [(monster-ideling? a-monster)
+         (define a-monster-fighter (entity-fighter a-monster))
+         (if (not (fighter? a-monster-fighter))
+             (values (struct-copy entity a-monster [turn-taken? #t]) state)
              ; TODO: Use lens here
-             (values (struct-copy entity an-entity
-                                  [fighter (struct-copy fighter an-entity-fighter
+             (values (struct-copy entity a-monster
+                                  [turn-taken? #t]
+                                  [fighter (struct-copy fighter a-monster-fighter
                                                         [target #f])])
                      state))]
-        [(eq? 'chasing an-entity-state)
-         (define new-an-entity-fighter
-           (struct-copy fighter (entity-fighter an-entity) [target #f]))
+        [(monster-chasing? a-monster)
+         (define new-a-monster-fighter
+           (struct-copy fighter (entity-fighter a-monster) [target #f]))
          ; TODO: PUll out a procedure to set turn-taken? on an entity, we do the same things several times
          (values (struct-copy entity
-                              (move-towards an-entity
+                              (move-towards a-monster
                                             (entity-x player)
                                             (entity-y player)
                                             state)
                               [turn-taken? #t])
                  state)]
-        [(eq? 'attacking an-entity-state)
+        [(monster-attacking? a-monster)
 ;         (log-debug "My position: ~v - ~v"
-;                    (entity-x an-entity) (entity-y an-entity))
+;                    (entity-x a-monster) (entity-y a-monster))
 ;         (log-debug "Attack player at: ~v ~v"
 ;                    (entity-x player) (entity-y player))
-         (define an-entity-fighter (entity-fighter an-entity))
-         (define new-player-entity (fighter-attack-target an-entity player))
-         (values (struct-copy entity an-entity [turn-taken? #t])
+         (define a-monster-fighter (entity-fighter a-monster))
+         (define new-player-entity (fighter-attack-target a-monster player))
+         (values (struct-copy entity a-monster [turn-taken? #t])
                  (struct-copy game-state state [player new-player-entity]))]
-        [else (values (struct-copy entity an-entity [turn-taken? #t]) state)]))
+        [else (values (struct-copy entity a-monster [turn-taken? #t]) state)]))
