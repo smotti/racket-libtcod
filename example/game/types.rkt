@@ -1,8 +1,8 @@
 #lang racket
 
 (provide (struct-out game-input)
-         (struct-out game-object)
-         make-game-object
+         (struct-out entity)
+         make-entity
          (struct-out game-state)
          make-game-state
          (struct-out fighter)
@@ -23,7 +23,7 @@
 ;;; Game object types
 ;;;
 
-(struct game-object
+(struct entity
   (x y dx dy
    char color
    type
@@ -36,7 +36,7 @@
    alive?)
   #:transparent)
 
-(define (make-game-object x y
+(define (make-entity x y
                           char
                           type
                           name
@@ -48,16 +48,16 @@
                           #:blocks [blocks #t]
                           #:fighter [a-fighter #f]
                           #:ai [an-ai #f])
-  (game-object x y
-               dx dy
-               char
-               color
-               type
-               name
-               state
-               blocks
-               a-fighter an-ai
-               turn-taken? alive?))
+  (entity x y
+          dx dy
+          char
+          color
+          type
+          name
+          state
+          blocks
+          a-fighter an-ai
+          turn-taken? alive?))
 
 ;;;
 ;;; Game state types
@@ -66,9 +66,9 @@
 (struct game-input (event key mouse))
 
 (struct game-state
-  (player objects map fov-map fov-recompute? exit mode action dead input))
+  (player entities map fov-map fov-recompute? exit mode action dead input))
 
-(define (make-game-state player objects
+(define (make-game-state player entities
                          map fov-map
                          [fov-recompute #t] [exit #f]
                          [mode 'playing] [action 'no-turn]
@@ -76,7 +76,7 @@
                          [input (game-input 'KEY_PRESS_MOUSE_MOVE
                                             (make-key-default)
                                             (make-mouse-default))])
-  (game-state player objects map fov-map fov-recompute exit mode action dead input))
+  (game-state player entities map fov-map fov-recompute exit mode action dead input))
 
 ;;;
 ;;; Component types

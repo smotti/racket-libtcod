@@ -11,7 +11,7 @@
 
          "ai.rkt"
          "game-constants.rkt"
-         "game-object.rkt"
+         "entity.rkt"
          "map.rkt"
          "message-log.rkt"
          "player.rkt"
@@ -71,56 +71,55 @@
 (define (update-player state)
   (define player (game-state-player state))
   (cond [(equal? 'no-turn (game-state-action state)) state]
-        [(game-object-dead? player) state]
+        [(entity-dead? player) state]
         [else 
          (struct-copy game-state (~> player
                                      (player-handle-input (game-state-input state) state)
                                      (player-update state))
                       [fov-recompute? #t])]))
 
-(define (update-objects state)
-  (define (updated? obj) (game-object-turn-taken? obj))
+(define (update-entities state)
+  (define (updated? enty) (entity-turn-taken? enty))
 
-  (define (updater current-object updated-objects latest-state)
-    (cond [(null? current-object) latest-state]
+  (define (updater current-entity updated-entities latest-state)
+    (cond [(null? current-entity) latest-state]
           [else
-           (define-values (new-object new-state)
-             (~> current-object
+           (define-values (new-entity new-state)
+             (~> current-entity
                  (ai-handle-state-transition latest-state)
                  (ai-update latest-state)))
-           (define objects-to-update
-             (filter-not updated? (game-state-objects new-state)))
+           (define entities-to-update
+             (filter-not updated? (game-state-entities new-state)))
 
-           (if (null? objects-to-update)
+           (if (null? entities-to-update)
                (struct-copy game-state new-state
-                            [objects (cons new-object updated-objects)])
-               (updater (first objects-to-update)
-                     (cons new-object updated-objects)
+                            [entities (cons new-entity updated-entities)])
+               (updater (first entities-to-update)
+                     (cons new-entity updated-entities)
                      (struct-copy game-state new-state
-                                  [objects (append updated-objects
-                                                   (rest objects-to-update))])))]))
+                                  [entities (append updated-entities
+                                                    (rest entities-to-update))])))]))
 
-  (define current-objects (filter-map
-                           (lambda (obj)
-                             (and (game-object-alive? obj)
-                                  (struct-copy game-object obj [turn-taken? #f])))
-                           (game-state-objects state)))
-  (define dead-objects (append (game-state-dead state)
-                               (filter (lambda (obj)
-                                         (game-object-dead? obj))
-                                       (game-state-objects state))))
+  (define current-entities
+    (filter-map (lambda (enty) (and (entity-alive? enty)
+                                    (struct-copy entity enty [turn-taken? #f])))
+                (game-state-entities state)))
+  (define dead-entities
+    (append (game-state-dead state)
+            (filter (lambda (enty) (entity-dead? enty))
+                    (game-state-entities state))))
   (if (not (eq? 'turn (game-state-action state)))
       state
-      (updater (first current-objects)
+      (updater (first current-entities)
                '()
                (struct-copy game-state state
-                            [objects (rest current-objects)]
-                            [dead dead-objects]))))
+                            [entities (rest current-entities)]
+                            [dead dead-entities]))))
 
 (define (update state)
   (~> state
       update-player
-      update-objects
+      update-entities
       ))
 
 (define (render-bar console x y total-width name value maximum bar-color back-color)
@@ -138,39 +137,39 @@
                     'BKGND_NONE 'CENTER
                     (format "~a: ~a/~a" name value maximum)))
 
-(define (render-game-object a-object fov-map)
-  (define x (game-object-x a-object))
-  (define y (game-object-y a-object))
+(define (render-entity an-entity fov-map)
+  (define x (entity-x an-entity))
+  (define y (entity-y an-entity))
 
   (when (map-is-in-fov fov-map x y)
     (console-set-default-foreground offscreen-console
-                                    (game-object-color a-object))
+                                    (entity-color an-entity))
     (console-put-char offscreen-console
                       x y
-                      (game-object-char a-object)
+                      (entity-char an-entity)
                       'BKGND_NONE)))
 
 (define (clear x y fov-map)
   (when (map-is-in-fov fov-map x y)
     (console-put-char offscreen-console x y #\. 'BKGND_NONE)))
 
-(define (clear-object-positions player fov-map objects)
-  ;(log-debug "Clear old position of objects")
-  (for-each (lambda (obj)
-              (clear (game-object-x obj) (game-object-y obj) fov-map))
-            objects))
+(define (clear-object-positions player fov-map entities)
+  ;(log-debug "Clear old position of entities")
+  (for-each (lambda (enty)
+              (clear (entity-x enty) (entity-y enty) fov-map))
+            entities))
 
-(define (names-under-mouse input objects fov-map)
+(define (names-under-mouse input entities fov-map)
   (define mouse (game-input-mouse input))
   (define-values (x y) (values (mouse-cx mouse) (mouse-cy mouse)))
   (define names
     (for/fold ([ns '()])
-              ([obj objects])
-      (define obj-x (game-object-x obj))
-      (define obj-y (game-object-y obj))
-      (if (and (= obj-x x) (= obj-y y)
-               (map-is-in-fov fov-map obj-x obj-y))
-          (cons (game-object-name obj) ns)
+              ([enty entities])
+      (define enty-x (entity-x enty))
+      (define enty-y (entity-y enty))
+      (if (and (= enty-x x) (= enty-y y)
+               (map-is-in-fov fov-map enty-x enty-y))
+          (cons (entity-name enty) ns)
           ns)))
 
   (string-join names ", "))
@@ -180,13 +179,13 @@
   (define fov-map (game-state-fov-map state))
   (define (visible? x y) (map-is-in-fov fov-map x y))
   (define player (game-state-player state))
-  (define player-x (game-object-x player))
-  (define player-y (game-object-y player))
+  (define player-x (entity-x player))
+  (define player-y (entity-y player))
 
   ;(log-debug "Render tiles")
   (when (game-state-fov-recompute? state)
     (map-compute-fov fov-map player-x player-y TORCH-RADIUS FOV-LIGHT-WALLS FOV-ALGO)
-    (clear-object-positions player fov-map (game-state-objects state))
+    (clear-object-positions player fov-map (game-state-entities state))
     (for ([y MAP-HEIGHT])
       (for ([x MAP-WIDTH])
         (define a-tile (map-ref a-map x y))
@@ -216,22 +215,22 @@
                                        color-white color-light-ground)])
            (set-tile-explored?! a-tile #t)]))))
 
-  ;(log-debug "Render dead objects")
-  (for-each (lambda (obj) (render-game-object obj fov-map))
+  ;(log-debug "Render dead entites")
+  (for-each (lambda (enty) (render-entity enty fov-map))
             (game-state-dead state))
 
-  ;(log-debug "Render objects")
-  (for-each (lambda (obj) (render-game-object obj fov-map))
-            (game-state-objects state))
+  ;(log-debug "Render alive entities")
+  (for-each (lambda (enty) (render-entity enty fov-map))
+            (game-state-entities state))
 
   ;(log-debug "Render player")
-  (render-game-object player fov-map)
+  (render-entity player fov-map)
 
   ;(log-debug "Render panel components")
   (console-set-default-background panel color-black)
   (console-clear panel)
 
-  (define player-fighter (game-object-fighter player))
+  (define player-fighter (entity-fighter player))
   (render-bar panel
               1 1
               BAR-WIDTH
@@ -246,7 +245,7 @@
                     1 0
                     'BKGND_NONE 'LEFT
                     (names-under-mouse (game-state-input state)
-                                       (game-state-objects state)
+                                       (game-state-entities state)
                                        fov-map))
 
   ;(log-debug "Render message log")
@@ -281,12 +280,12 @@
 ;(log-debug "Initialize game")
 (sys-set-fps 60)
 (define initial-game-state
-  (let-values ([(a-map objects player-start-position) (make-map)])
+  (let-values ([(a-map entities player-start-position) (make-map)])
     (define player (make-player (car player-start-position)
                                 (cdr player-start-position)
                                 "namra"))
     (define fov-map (make-fov-map MAP-WIDTH MAP-HEIGHT a-map))
-    (make-game-state player objects a-map fov-map)))
+    (make-game-state player entities a-map fov-map)))
 
 ;(log-debug "Enter game loop")
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."

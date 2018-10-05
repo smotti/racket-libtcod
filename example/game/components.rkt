@@ -9,42 +9,43 @@
          "types.rkt"
          )
 
-(define (any-fighter-being-attacked? attacker-x attacker-y objects)
-  (for/or ([t objects])
+(define (any-fighter-being-attacked? attacker-x attacker-y entities)
+  (for/or ([t entities])
     (if (fighter-being-attacked? attacker-x attacker-y t)
         t
         #f)))
 
 (define (fighter-being-attacked? attacker-x attacker-y target)
-  (define-values (target-x target-y) (values (game-object-x target)
-                                             (game-object-y target)))
+  (define-values (target-x target-y) (values (entity-x target)
+                                             (entity-y target)))
   (and (= attacker-x target-x) (= attacker-y target-y)
-       (not (false? (game-object-fighter target)))))
+       (not (false? (entity-fighter target)))))
 
 (define (fighter-deal-damage damage target-fighter)
   (struct-copy fighter target-fighter [hp (- (fighter-hp target-fighter)
                                              damage)]))
 
-(define (fighter-attack-target attacker-object target-object)
-  (define attacker (game-object-fighter attacker-object))
-  (define target (game-object-fighter target-object))
+(define (fighter-attack-target attacker-entity target-entity)
+  (define attacker (entity-fighter attacker-entity))
+  (define target (entity-fighter target-entity))
   (define damage (- (fighter-power attacker)
                     (fighter-defense target)))
 
   (cond [(> damage 0)
          (message-add (format "~s attacks ~s for ~v hit points."
-                              (game-object-name attacker-object)
-                              (game-object-name target-object)
+                              (entity-name attacker-entity)
+                              (entity-name target-entity)
                               damage))
          (define new-target (fighter-deal-damage damage target))
+         ; TODO: Maybe here we can use a lens-transform with lens-compose
          (cond [(> (fighter-hp new-target) 0)
-                (struct-copy game-object target-object [fighter new-target])]
-               [else (struct-copy game-object
-                                  ((fighter-die new-target) target-object)
+                (struct-copy entity target-entity [fighter new-target])]
+               [else (struct-copy entity
+                                  ((fighter-die new-target) target-entity)
                                   [fighter (struct-copy fighter new-target
                                                         [hp 0])])])]
         [else
          (message-add (format "~s attacks ~s but is has no effect!"
-                              (game-object-name attacker-object)
-                              (game-object-name target-object)))
-         target-object]))
+                              (entity-name attacker-entity)
+                              (entity-name target-entity)))
+         target-entity]))

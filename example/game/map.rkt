@@ -77,15 +77,15 @@
       (vector-ref y)
       (vector-ref x)))
 
-(define (tile-is-blocked? x y a-map objs)
+(define (tile-is-blocked? x y a-map entities)
   (define a-tile (map-ref a-map x y))
 
   (cond
     [(tile-blocked? a-tile) #t]
-    [else (for/or ([o objs])
-            (and (game-object-blocks o)
-                 (= (game-object-x o) x)
-                 (= (game-object-y o) y)))]))
+    [else (for/or ([e entities])
+            (and (entity-blocks e)
+                 (= (entity-x e) x)
+                 (= (entity-y e) y)))]))
 
 (define (tile-wall? a-tile)
   (tile-block-sight a-tile))
@@ -115,55 +115,54 @@
     (set-tile-blocked?! t #f)
     (set-tile-block-sight! t #f)))
 
-(define (place-objects room a-map)
-  ;(define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
-  (define num-monsters 1)
+(define (place-entities room a-map)
+  (define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
 
-  (define (accumulate-objects objs counter)
+  (define (accumulate-entities entities counter)
     (define x (random-default-get-int (rectangle-x1 room) (rectangle-x2 room)))
     (define y (random-default-get-int (rectangle-y1 room) (rectangle-y2 room)))
 
     (cond
-      [(= counter num-monsters) objs]
-      [(tile-is-blocked? x y a-map objs)
-       (accumulate-objects objs counter)]
+      [(= counter num-monsters) entities]
+      [(tile-is-blocked? x y a-map entities)
+       (accumulate-entities entities counter)]
       [else
        (define choice (random-default-get-int 0 100))
        (cond
          [(< choice 80)
-          (define new-obj (make-game-object x y
-                                            #\o 
-                                            'monster
-                                            "Orc"
-                                            'ideling
-                                            0 0
-                                            color-desaturated-green
-                                            #:blocks #t
-                                            #:fighter (make-fighter
-                                                       #:hp 10
-                                                       #:defense 0
-                                                       #:power 3
-                                                       #:die monster-die)
-                                            #:ai (make-monster-ai #t #t)))
-          (accumulate-objects (cons new-obj objs) (add1 counter))]
+          (define new-entity (make-entity x y
+                                       #\o 
+                                       'monster
+                                       "Orc"
+                                       'ideling
+                                       0 0
+                                       color-desaturated-green
+                                       #:blocks #t
+                                       #:fighter (make-fighter
+                                                  #:hp 10
+                                                  #:defense 0
+                                                  #:power 3
+                                                  #:die monster-die)
+                                       #:ai (make-monster-ai #t #t)))
+          (accumulate-entities (cons new-entity entities) (add1 counter))]
          [else
-          (define new-obj (make-game-object x y
-                                            #\T
-                                            'monster
-                                            "Troll"
-                                            'ideling
-                                            0 0
-                                            color-darker-green
-                                            #:blocks #t
-                                            #:fighter (make-fighter
-                                                       #:hp 16
-                                                       #:defense 1
-                                                       #:power 4
-                                                       #:die monster-die)
-                                            #:ai (make-monster-ai #t #t)))
-          (accumulate-objects (cons new-obj objs) (add1 counter))])]))
+          (define new-entity (make-entity x y
+                                          #\T
+                                          'monster
+                                          "Troll"
+                                          'ideling
+                                          0 0
+                                          color-darker-green
+                                          #:blocks #t
+                                          #:fighter (make-fighter
+                                                     #:hp 16
+                                                     #:defense 1
+                                                     #:power 4
+                                                     #:die monster-die)
+                                          #:ai (make-monster-ai #t #t)))
+          (accumulate-entities (cons new-entity entities) (add1 counter))])]))
 
-  (accumulate-objects '() 0))
+  (accumulate-entities '() 0))
 
 ;;;
 ;;; Map
@@ -216,7 +215,7 @@
        (make-rooms (cons new-room rooms)
                    (append (if (= 0 no-of-rooms)
                                '()  ; No monsters in players starting room
-                               (place-objects new-room a-map))
+                               (place-entities new-room a-map))
                            objs)
                    (make-new-room)
                    (add1 no-of-rooms))]))
