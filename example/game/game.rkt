@@ -14,6 +14,7 @@
          "entity.rkt"
          "map.rkt"
          "message-log.rkt"
+         "monster.rkt"
          "player.rkt"
          "types.rkt"
          )
@@ -280,12 +281,13 @@
 ;(log-debug "Initialize game")
 (sys-set-fps 60)
 (define initial-game-state
-  (let-values ([(a-map entities player-start-position) (make-map)])
+  (let-values ([(a-map player-start-position) (make-map)]
+               [(monsters) (generate-monsters 30)])
     (define player (make-player (car player-start-position)
                                 (cdr player-start-position)
                                 "namra"))
     (define fov-map (make-fov-map MAP-WIDTH MAP-HEIGHT a-map))
-    (make-game-state player entities a-map fov-map)))
+    (make-game-state player (place-entities monsters a-map) a-map fov-map)))
 
 ;(log-debug "Enter game loop")
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."

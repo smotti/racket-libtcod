@@ -16,7 +16,6 @@
          "../../random.rkt"
 
          "ai-types.rkt"
-         "monster.rkt"
          "types.rkt")
 ;;;
 ;;; Map tile
@@ -37,7 +36,6 @@
 (define ROOM-MAX-SIZE 10)
 (define ROOM-MIN-SIZE 6)
 (define MAX-ROOMS 30)
-(define MAX-ROOM-MONSTERS 3)
 
 ;;;
 ;;; Rectangle
@@ -115,55 +113,6 @@
     (set-tile-blocked?! t #f)
     (set-tile-block-sight! t #f)))
 
-(define (place-entities room a-map)
-  (define num-monsters (random-default-get-int 0 MAX-ROOM-MONSTERS))
-
-  (define (accumulate-entities entities counter)
-    (define x (random-default-get-int (rectangle-x1 room) (rectangle-x2 room)))
-    (define y (random-default-get-int (rectangle-y1 room) (rectangle-y2 room)))
-
-    (cond
-      [(= counter num-monsters) entities]
-      [(tile-is-blocked? x y a-map entities)
-       (accumulate-entities entities counter)]
-      [else
-       (define choice (random-default-get-int 0 100))
-       (cond
-         [(< choice 80)
-          (define new-entity (make-entity x y
-                                       #\o 
-                                       'monster
-                                       "Orc"
-                                       'ideling
-                                       0 0
-                                       color-desaturated-green
-                                       #:blocks #t
-                                       #:fighter (make-fighter
-                                                  #:hp 10
-                                                  #:defense 0
-                                                  #:power 3
-                                                  #:die monster-die)
-                                       #:ai (make-monster-ai #t #t)))
-          (accumulate-entities (cons new-entity entities) (add1 counter))]
-         [else
-          (define new-entity (make-entity x y
-                                          #\T
-                                          'monster
-                                          "Troll"
-                                          'ideling
-                                          0 0
-                                          color-darker-green
-                                          #:blocks #t
-                                          #:fighter (make-fighter
-                                                     #:hp 16
-                                                     #:defense 1
-                                                     #:power 4
-                                                     #:die monster-die)
-                                          #:ai (make-monster-ai #t #t)))
-          (accumulate-entities (cons new-entity entities) (add1 counter))])]))
-
-  (accumulate-entities '() 0))
-
 ;;;
 ;;; Map
 ;;;
@@ -191,12 +140,12 @@
   (define (does-intersect? rooms new-room)
     (for/or ([room rooms]) (intersect new-room room)))
 
-  (define (make-rooms rooms objs new-room no-of-rooms)
+  (define (make-rooms rooms new-room no-of-rooms)
     (cond
-      [(= MAX-ROOMS no-of-rooms) (values rooms objs)]
+      [(= MAX-ROOMS no-of-rooms) rooms]
       [(does-intersect? rooms new-room)
 ;       (log-debug "New room intersects with existing room!")
-       (make-rooms rooms objs (make-new-room) no-of-rooms)]
+       (make-rooms rooms (make-new-room) no-of-rooms)]
       [else
 ;       (log-debug "Create new room")
        (create-room new-room a-map)
@@ -213,17 +162,13 @@
            [else (create-v-tunnel prev-y new-y prev-x a-map)
                  (create-h-tunnel prev-x new-x new-y a-map)]))
        (make-rooms (cons new-room rooms)
-                   (append (if (= 0 no-of-rooms)
-                               '()  ; No monsters in players starting room
-                               (place-entities new-room a-map))
-                           objs)
                    (make-new-room)
                    (add1 no-of-rooms))]))
 
-  (define-values (rooms objs) (make-rooms '() '() first-room 0))
+  (make-rooms '() first-room 0)
   (log-debug "Created map")
 
-  (values a-map objs player-start-position))
+  (values a-map player-start-position))
 
 (define (make-fov-map w h a-map)
   (define fov-map (map-new MAP-WIDTH MAP-HEIGHT))
