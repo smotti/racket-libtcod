@@ -47,11 +47,13 @@
 ; NOTE: Eagerly trying to place an entity might not the best idea, instead it
 ; should stop after several failed attempts.
 (define (place-entities entities a-map)
-  (define (place-entity enty)
+  (define (place-entity enty placed)
     (define x (random-default-get-int 0 (- MAP-WIDTH 1)))
     (define y (random-default-get-int 0 (- MAP-HEIGHT 1)))
-    (cond [(not (tile-is-blocked? x y a-map entities))
+    (cond [(not (tile-is-blocked? x y a-map placed))
            (struct-copy entity enty [x x] [y y])]
           ; Eagerly try to place the entity
-          [else (place-entity enty)]))
-  (map place-entity entities))
+          [else (place-entity enty placed)]))
+  (for/fold ([placed '()])
+            ([e entities])
+    (cons (place-entity e placed) placed)))
