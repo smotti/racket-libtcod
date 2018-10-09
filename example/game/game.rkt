@@ -12,6 +12,7 @@
          "ai.rkt"
          "game-constants.rkt"
          "entity.rkt"
+         "item-component.rkt"
          "map.rkt"
          "message-log.rkt"
          "monster.rkt"
@@ -60,7 +61,8 @@
   (define key-pressed (key-vk key))
 
   ;(log-debug "Process Input")
-  ;(log-debug (format "Event: ~v --- Key: ~v --- Mouse: ~v" event key-pressed mouse))
+  ;(log-debug (format "Event: ~v --- Key: ~v --- Mouse: ~v"
+  ;                   event key-pressed mouse))
 
   (define exit? (equal? 'ESCAPE key-pressed))
   (define action (if (or (eq? 'NONE event)
@@ -109,7 +111,8 @@
     (append (game-state-dead state)
             (filter (lambda (enty) (entity-dead? enty))
                     (game-state-entities state))))
-  (if (not (eq? 'turn (game-state-action state)))
+  (if (or (not (eq? 'turn (game-state-action state)))
+          (null? current-entities))
       state
       (updater (first current-entities)
                '()
@@ -216,6 +219,10 @@
                                        color-white color-light-ground)])
            (set-tile-explored?! a-tile #t)]))))
 
+  ;(log-debug "Render items")
+  (hash-for-each (game-state-items state)
+                 (lambda (_ enty) (render-entity enty fov-map)))
+
   ;(log-debug "Render dead entites")
   (for-each (lambda (enty) (render-entity enty fov-map))
             (game-state-dead state))
@@ -246,7 +253,8 @@
                     1 0
                     'BKGND_NONE 'LEFT
                     (names-under-mouse (game-state-input state)
-                                       (game-state-entities state)
+                                       (append (hash-values (game-state-items state))
+                                               (game-state-entities state))
                                        fov-map))
 
   ;(log-debug "Render message log")
@@ -282,12 +290,17 @@
 (sys-set-fps 60)
 (define initial-game-state
   (let-values ([(a-map player-start-position) (make-map)]
-               [(monsters) (generate-monsters 30)])
+               [(monsters) (generate-monsters 30)]
+               [(items) (generate-items)])
     (define player (make-player (car player-start-position)
                                 (cdr player-start-position)
                                 "namra"))
     (define fov-map (make-fov-map MAP-WIDTH MAP-HEIGHT a-map))
-    (make-game-state player (place-entities monsters a-map) a-map fov-map)))
+    (make-game-state player
+                     (place-entities monsters a-map)
+                     a-map fov-map
+                     (for/hash ([i (place-entities items a-map)])
+                       (values `#(,(entity-x i) ,(entity-y i)) i)))))
 
 ;(log-debug "Enter game loop")
 (message-add "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings."

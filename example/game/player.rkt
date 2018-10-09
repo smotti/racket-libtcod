@@ -10,9 +10,10 @@
          "../../color.rkt"
          "../../console.rkt"
 
-         "components.rkt"
          "fighter-component.rkt"
          "entity.rkt"
+         "inventory.rkt"
+         "item-component.rkt"
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
@@ -31,6 +32,8 @@
                #\@ 'player
                name
                'ideling
+               0 0
+               (make-inventory)
                #:fighter (make-fighter #:hp 30
                                        #:defense 2
                                        #:power 5
@@ -46,7 +49,9 @@
   (define target-entity (any-fighter-being-attacked? move-to-x move-to-y
                                                      entities))
 
-  (cond [(and target-entity (entity-alive? target-entity))
+  (cond [(eq? #\g (key-c (game-input-key input)))
+         (struct-copy entity player [state 'picking-up-item])]
+        [(and target-entity (entity-alive? target-entity))
          ;(log-debug (format "Target: ~v" target-object))
          ; TODO: Maybe we could something here too with lenses, but don't force it if it doesn't help make the code more concise/simpler
          (define new-player-fighter
@@ -67,6 +72,9 @@
 
 (define (player-moving? player)
   (eq? 'moving (entity-state player)))
+
+(define (player-picking-up-item? player)
+  (eq? 'picking-up-item (entity-state player)))
 
 (define (player-update player state)
   ;(log-debug (format "Player state: ~v" player-state))
@@ -93,6 +101,18 @@
 ;                    (entity-x new-player) (entity-y new-player))
          (struct-copy game-state state
                       [player new-player])]
+        [(player-picking-up-item? player)
+         (define-values (an-item new-items)
+           (item-pick-up `#(,(entity-x player) ,(entity-y player))
+                         (game-state-items state)))
+         (define new-player
+           (struct-copy entity player
+                        [inventory (if (not an-item)
+                                       (entity-inventory player)
+                                       (inventory-add (entity-inventory player)
+                                                      an-item))]
+                        [state 'ideling]))
+         (struct-copy game-state state [player new-player] [items new-items])]
         [else
          (struct-copy game-state state [player (entity-set-state player
                                                                  'ideling)])]))

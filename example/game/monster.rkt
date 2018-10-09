@@ -10,6 +10,7 @@
          "../../random.rkt"
 
          "ai.rkt"
+         "inventory.rkt"
          "message-log.rkt"
          "types.rkt")
 
@@ -23,6 +24,7 @@
                         "Orc"
                         'ideling
                         0 0
+                        (make-inventory)
                         color-desaturated-green
                         #:blocks #t
                         #:fighter (make-fighter
@@ -38,6 +40,7 @@
                         "Troll"
                         'ideling
                         0 0
+                        (make-inventory)
                         color-darker-green
                         #:blocks #t
                         #:fighter (make-fighter

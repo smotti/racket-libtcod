@@ -10,7 +10,9 @@
          (struct-out tile)
          )
 
-(require "../../color.rkt"
+(require data/pvector
+
+         "../../color.rkt"
          "../../console.rkt"
          "../../fov.rkt"
          "../../mouse.rkt"
@@ -30,6 +32,7 @@
    name
    state
    blocks
+   inventory
    fighter
    ai
    turn-taken?
@@ -37,17 +40,18 @@
   #:transparent)
 
 (define (make-entity x y
-                          char
-                          type
-                          name
-                          state
-                          [dx 0] [dy 0]
-                          [color color-white]
-                          [turn-taken? #f]
-                          [alive? #t]
-                          #:blocks [blocks #t]
-                          #:fighter [a-fighter #f]
-                          #:ai [an-ai #f])
+                     char
+                     type
+                     name
+                     state
+                     [dx 0] [dy 0]
+                     [inventory (pvector)]
+                     [color color-white]
+                     [turn-taken? #f]
+                     [alive? #t]
+                     #:blocks [blocks #t]
+                     #:fighter [a-fighter #f]
+                     #:ai [an-ai #f])
   (entity x y
           dx dy
           char
@@ -56,6 +60,7 @@
           name
           state
           blocks
+          inventory
           a-fighter an-ai
           turn-taken? alive?))
 
@@ -66,17 +71,18 @@
 (struct game-input (event key mouse))
 
 (struct game-state
-  (player entities map fov-map fov-recompute? exit mode action dead input))
+  (player entities map fov-map fov-recompute? exit mode action dead items input))
 
 (define (make-game-state player entities
                          map fov-map
+                         [items (make-immutable-hash)]
                          [fov-recompute #t] [exit #f]
                          [mode 'playing] [action 'no-turn]
                          [dead '()]
                          [input (game-input 'KEY_PRESS_MOUSE_MOVE
                                             (make-key-default)
                                             (make-mouse-default))])
-  (game-state player entities map fov-map fov-recompute exit mode action dead input))
+  (game-state player entities map fov-map fov-recompute exit mode action dead items input))
 
 ;;;
 ;;; Component types
