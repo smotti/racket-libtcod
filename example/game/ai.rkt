@@ -76,7 +76,6 @@
                                  (entity-x a-monster) (entity-y a-monster)))
   (define not-in-fov? (not in-fov?))
 ;  (log-debug "Distance to player: ~v" (distance-to a-monster player))
-  ; TODO: Pull out a procedure to set a new state for a given an-entity
   (if (entity-dead? player)
       (if (monster-ideling? a-monster)
           a-monster

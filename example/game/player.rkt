@@ -12,7 +12,6 @@
 
          "components.rkt"
          "entity.rkt"
-         "game-state.rkt"
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
@@ -59,15 +58,18 @@
                       [state 'attacking])]
         [else
          (if (tile-is-blocked? move-to-x move-to-y (game-state-map state) entities)
-             ; TODO: Just state setting here use new proc
-             (struct-copy entity player [state 'ideling])
-             (struct-copy entity player
-                          [dx dx] [dy dy] [state 'moving]))]))
+             (entity-set-state player 'ideling)
+             (struct-copy entity player [dx dx] [dy dy] [state 'moving]))]))
+
+(define (player-attacking? player)
+  (eq? 'attacking (entity-state player)))
+
+(define (player-moving? player)
+  (eq? 'moving (entity-state player)))
 
 (define (player-update player state)
-  (define player-state (entity-state player))
   ;(log-debug (format "Player state: ~v" player-state))
-  (cond [(eq? 'attacking player-state)
+  (cond [(player-attacking? player)
          (define player-fighter (entity-fighter player))
          (define attacked-entity
            (fighter-attack-target player (fighter-target player-fighter)))
@@ -84,13 +86,12 @@
          (define new-player
            (struct-copy entity player [fighter new-player-fighter]))
          (struct-copy game-state state [player new-player ] [entities new-entities])]
-        [(eq? 'moving player-state)
+        [(player-moving? player)
          (define new-player (entity-move player))
 ;         (log-debug "Player moves to: ~v - ~v"
 ;                    (entity-x new-player) (entity-y new-player))
          (struct-copy game-state state
                       [player new-player])]
         [else
-         ; TODO: Just state setting here use new proc
-         (define new-player (struct-copy entity player [state 'ideling]))
-         (struct-copy game-state state [player new-player])]))
+         (struct-copy game-state state [player (entity-set-state player
+                                                                 'ideling)])]))
