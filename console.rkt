@@ -60,72 +60,73 @@
 
   (define-cpointer-type _console)
 
-  (define _keycode (_enum '(NONE
-                            ESCAPE
-                            BACKSPACE
-                            TAB
-                            ENTER
-                            SHIFT
-                            CONTROL
-                            ALT
-                            PAUSE
-                            CAPSLOCK
-                            PAGEUP
-                            PAGEDOWN
-                            END
-                            HOME
-                            UP
-                            LEFT
-                            RIGHT
-                            DOWN
-                            PRINTSCREEN
-                            INSERT
-                            DELETE
-                            LWIN
-                            RWIN
-                            APPS
-                            NO_0
-                            NO_1
-                            NO_2
-                            NO_3
-                            NO_4
-                            NO_5
-                            NO_6
-                            NO_7
-                            NO_8
-                            NO_9
-                            KP0
-                            KP1
-                            KP2
-                            KP3
-                            KP4
-                            KP5
-                            KP6
-                            KP7
-                            KP8
-                            KP9
-                            KPADD
-                            KPSUB
-                            KPDIV
-                            KPMUL
-                            KPDEC
-                            KPENTER
-                            F1
-                            F2
-                            F3
-                            F4
-                            F5
-                            F6
-                            F7
-                            F8
-                            F9
-                            F10
-                            F11
-                            F12
-                            NUMLOCK
-                            SCROLLLOCK
-                            SPACE
-                            CHAR)))
+  (define _keycode (_enum '(NONE = 0
+                            ESCAPE = 1
+                            BACKSPACE = 2
+                            TAB = 3
+                            ENTER = 4
+                            SHIFT = 5
+                            CONTROL = 6
+                            ALT = 7
+                            PAUSE = 8
+                            CAPSLOCK = 9
+                            PAGEUP = 10
+                            PAGEDOWN = 11
+                            END = 12
+                            HOME = 13
+                            UP = 14
+                            LEFT = 15
+                            RIGHT = 16
+                            DOWN = 17
+                            PRINTSCREEN = 18
+                            INSERT = 19
+                            DELETE = 20
+                            LWIN = 21
+                            RWIN = 22
+                            APPS = 23
+                            NO_0 = 24
+                            NO_1 = 25
+                            NO_2 = 26
+                            NO_3 = 27
+                            NO_4 = 28
+                            NO_5 = 29
+                            NO_6 = 30
+                            NO_7 = 31
+                            NO_8 = 32
+                            NO_9 = 33
+                            KP0 = 34
+                            KP1 = 35
+                            KP2 = 36
+                            KP3 = 37
+                            KP4 = 38
+                            KP5 = 39
+                            KP6 = 40
+                            KP7 = 41
+                            KP8 = 42
+                            KP9 = 43
+                            KPADD = 44
+                            KPSUB = 45
+                            KPDIV = 46
+                            KPMUL = 47
+                            KPDEC = 48
+                            KPENTER = 49
+                            F1 = 50
+                            F2 = 51
+                            F3 = 52
+                            F4 = 53
+                            F5 = 54
+                            F6 = 55
+                            F7 = 56
+                            F8 = 57
+                            F9 = 58
+                            F10 = 59
+                            F11 = 60
+                            F12 = 61
+                            NUMLOCK = 62
+                            SCROLLLOCK = 63
+                            SPACE = 64
+                            CHAR = 65
+                            TEXT = 66)))
 
   (define-cstruct _key ([vk _keycode]
                         [c _char]
