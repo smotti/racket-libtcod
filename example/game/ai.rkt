@@ -13,7 +13,7 @@
          "../../fov.rkt"
 
          "ai-types.rkt"
-         "components.rkt"
+         "fighter-component.rkt"
          "entity.rkt"
          "map.rkt"
          "message-log.rkt"

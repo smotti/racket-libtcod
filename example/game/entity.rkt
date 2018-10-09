@@ -11,7 +11,7 @@
          "../../console.rkt"
          "../../random.rkt"
 
-         "components.rkt"
+         "fighter-component.rkt"
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
