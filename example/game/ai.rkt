@@ -26,7 +26,7 @@
   (define dy (- (entity-y to) (entity-y from)))
   (sqrt (+ (sqr dx) (sqr dy))))
 
-(define (move-towards an-entity x y state)
+(define (move-towards an-entity x y a-map entities)
   ; vector from obj to target and distance
   (define dx (- x (entity-x an-entity)))
   (define dy (- y (entity-y an-entity)))
@@ -36,24 +36,25 @@
   (define ddy (~> dy (/ distance) exact-round))
 
   (if (tile-is-blocked? (+ (entity-x an-entity) ddx)
-                     (+ (entity-y an-entity) ddy)
-                     (game-state-map state)
-                     (game-state-entities state))
+                        (+ (entity-y an-entity) ddy)
+                        a-map
+                        entities)
       an-entity
       ; normalize vector to length of 1 (preserving direction)
       ; rounding is done to get an integer that is restricted to the map grid
       (entity-move an-entity #:dx ddx #:dy ddy)))
 
-(define (ai-handle-state-transition an-entity state)
+(define (ai-handle-state-transition an-entity player fov-map)
   (define an-entity-ai (entity-ai an-entity))
   (cond [(monster-ai? an-entity-ai)
-         (monster-ai-handle-state-transition an-entity state)]
+         (monster-ai-handle-state-transition an-entity player fov-map)]
         [else an-entity]))
 
-(define (ai-update an-entity state)
+(define (ai-update an-entity player a-map entities)
   (define an-entity-ai (entity-ai an-entity))
-  (cond [(monster-ai? an-entity-ai) (monster-ai-update an-entity state)]
-        [else (values an-entity state)]))
+  (cond [(monster-ai? an-entity-ai)
+         (monster-ai-update an-entity player a-map entities)]
+        [else (values an-entity player)]))
 
 (define (monster-attacking? a-monster)
   (eq? 'attacking (entity-state a-monster)))
@@ -70,9 +71,8 @@
 (define (monster-not-in-attack-range? a-monster player)
   (>= (exact-round (distance-to a-monster player)) 2))
 
-(define (monster-ai-handle-state-transition a-monster state)
-  (define player (game-state-player state))
-  (define in-fov? (map-is-in-fov (game-state-fov-map state)
+(define (monster-ai-handle-state-transition a-monster player fov-map)
+  (define in-fov? (map-is-in-fov fov-map
                                  (entity-x a-monster) (entity-y a-monster)))
   (define not-in-fov? (not in-fov?))
 ;  (log-debug "Distance to player: ~v" (distance-to a-monster player))
@@ -97,29 +97,28 @@
              (entity-set-state a-monster 'chasing)]
             [else a-monster])))
 
-(define (monster-ai-update a-monster state)
-  (define player (game-state-player state))
+(define (monster-ai-update a-monster player a-map entities)
   (cond [(monster-ideling? a-monster)
          (define a-monster-fighter (entity-fighter a-monster))
          (if (not (fighter? a-monster-fighter))
-             (values (struct-copy entity a-monster [turn-taken? #t]) state)
+             (values (struct-copy entity a-monster [turn-taken? #t]) player)
              ; TODO: Use lens here
              (values (struct-copy entity a-monster
                                   [turn-taken? #t]
                                   [fighter (struct-copy fighter a-monster-fighter
                                                         [target #f])])
-                     state))]
+                     player))]
         [(monster-chasing? a-monster)
          (define new-a-monster-fighter
            (struct-copy fighter (entity-fighter a-monster) [target #f]))
-         ; TODO: PUll out a procedure to set turn-taken? on an entity, we do the same things several times
          (values (struct-copy entity
                               (move-towards a-monster
                                             (entity-x player)
                                             (entity-y player)
-                                            state)
+                                            a-map
+                                            entities)
                               [turn-taken? #t])
-                 state)]
+                 player)]
         [(monster-attacking? a-monster)
 ;         (log-debug "My position: ~v - ~v"
 ;                    (entity-x a-monster) (entity-y a-monster))
@@ -128,5 +127,5 @@
          (define a-monster-fighter (entity-fighter a-monster))
          (define new-player-entity (fighter-attack-target a-monster player))
          (values (struct-copy entity a-monster [turn-taken? #t])
-                 (struct-copy game-state state [player new-player-entity]))]
-        [else (values (struct-copy entity a-monster [turn-taken? #t]) state)]))
+                 new-player-entity)]
+        [else (values (struct-copy entity a-monster [turn-taken? #t]) player)]))

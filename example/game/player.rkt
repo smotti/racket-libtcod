@@ -39,13 +39,12 @@
                                        #:power 5
                                        #:die player-die)))
 
-(define (player-handle-input player input state)
+(define (player-handle-input player input entities a-map)
   (define-values (dx dy) (input-move-deltas (key-vk (game-input-key input))))
   (define player-x (entity-x player))
   (define player-y (entity-y player))
   (define player-fighter (entity-fighter player))
   (define-values (move-to-x move-to-y) (values (+ player-x dx) (+ player-y dy)))
-  (define entities (game-state-entities state))
   (define target-entity (any-fighter-being-attacked? move-to-x move-to-y
                                                      entities))
 
@@ -63,7 +62,7 @@
                       [fighter new-player-fighter]
                       [state 'attacking])]
         [else
-         (if (tile-is-blocked? move-to-x move-to-y (game-state-map state) entities)
+         (if (tile-is-blocked? move-to-x move-to-y a-map entities)
              (entity-set-state player 'ideling)
              (struct-copy entity player [dx dx] [dy dy] [state 'moving]))]))
 
@@ -76,13 +75,13 @@
 (define (player-picking-up-item? player)
   (eq? 'picking-up-item (entity-state player)))
 
-(define (player-update player state)
+(define (player-update player entities items)
   ;(log-debug (format "Player state: ~v" player-state))
   (cond [(player-attacking? player)
          (define player-fighter (entity-fighter player))
          (define attacked-entity
            (fighter-attack-target player (fighter-target player-fighter)))
-         (define new-entities (for/list ([enty (game-state-entities state)])
+         (define new-entities (for/list ([enty entities])
                                 (if (equal? enty (fighter-target player-fighter))
                                     attacked-entity
                                     enty)))
@@ -94,17 +93,15 @@
                                     attacked-entity)]))
          (define new-player
            (struct-copy entity player [fighter new-player-fighter]))
-         (struct-copy game-state state [player new-player ] [entities new-entities])]
+         (values new-player new-entities items)]
         [(player-moving? player)
          (define new-player (entity-move player))
 ;         (log-debug "Player moves to: ~v - ~v"
 ;                    (entity-x new-player) (entity-y new-player))
-         (struct-copy game-state state
-                      [player new-player])]
+         (values new-player entities items)]
         [(player-picking-up-item? player)
          (define-values (an-item new-items)
-           (item-pick-up `#(,(entity-x player) ,(entity-y player))
-                         (game-state-items state)))
+           (item-pick-up `#(,(entity-x player) ,(entity-y player)) items))
          (define new-player
            (struct-copy entity player
                         [inventory (if (not an-item)
@@ -112,7 +109,5 @@
                                        (inventory-add (entity-inventory player)
                                                       an-item))]
                         [state 'ideling]))
-         (struct-copy game-state state [player new-player] [items new-items])]
-        [else
-         (struct-copy game-state state [player (entity-set-state player
-                                                                 'ideling)])]))
+         (values new-player entities new-items)]
+        [else (values (entity-set-state player) entities items)]))

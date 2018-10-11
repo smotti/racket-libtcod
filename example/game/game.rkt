@@ -76,10 +76,16 @@
   (cond [(equal? 'no-turn (game-state-action state)) state]
         [(entity-dead? player) state]
         [else 
-         (struct-copy game-state (~> player
-                                     (player-handle-input (game-state-input state) state)
-                                     (player-update state))
-                      [fov-recompute? #t])]))
+         (define entities (game-state-entities state))
+         (define-values (new-player new-entities new-items)
+           (~> player
+               (player-handle-input (game-state-input state)
+                                    entities
+                                    (game-state-map state))
+               (player-update entities (game-state-items state))))
+         (struct-copy game-state state
+                      [player new-player] [entities new-entities]
+                      [items new-items] [fov-recompute? #t])]))
 
 (define (update-entities state)
   (define (updated? enty) (entity-turn-taken? enty))
@@ -87,21 +93,27 @@
   (define (updater current-entity updated-entities latest-state)
     (cond [(null? current-entity) latest-state]
           [else
-           (define-values (new-entity new-state)
+           (define player (game-state-player latest-state))
+           (define entities (game-state-entities latest-state))
+           (define-values (new-entity new-player)
              (~> current-entity
-                 (ai-handle-state-transition latest-state)
-                 (ai-update latest-state)))
-           (define entities-to-update
-             (filter-not updated? (game-state-entities new-state)))
+                 (ai-handle-state-transition player
+                                             (game-state-fov-map latest-state))
+                 (ai-update player
+                            (game-state-map latest-state)
+                            (game-state-entities latest-state))))
+           (define entities-to-update (filter-not updated? entities))
 
            (if (null? entities-to-update)
-               (struct-copy game-state new-state
-                            [entities (cons new-entity updated-entities)])
+               (struct-copy game-state latest-state
+                            [entities (cons new-entity updated-entities)]
+                            [player new-player])
                (updater (first entities-to-update)
                         (cons new-entity updated-entities)
-                        (struct-copy game-state new-state
+                        (struct-copy game-state latest-state
                                      [entities (append updated-entities
-                                                       (rest entities-to-update))])))]))
+                                                       (rest entities-to-update))]
+                                     [player new-player])))]))
 
   (define current-entities
     (filter-map (lambda (enty) (and (entity-alive? enty)
