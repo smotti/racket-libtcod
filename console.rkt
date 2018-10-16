@@ -6,12 +6,14 @@
            console-blit
            ;         console-disable-keyboard-repeat
            console-clear
+           console-get-height-rect
            console-flush
            console-init-root
            console-is-key-pressed
            console-is-window-closed
            console-new
            console-print-ex
+           console-print-rect-ex
            console-put-char
            console-put-char-ex
            console-rect
@@ -164,13 +166,20 @@
   ;;;
 
   (define-tcod console-blit
-    (_fun _console _int _int _int _int _int _int _int (_float = 1.0) (_float = 1.0)
+    (_fun (src x-src y-src w-src h-src dst x-dst y-dst [fg 1.0] [bg 1.0]) ::
+          (src : _console) (x-src : _int) (y-src : _int) (w-src : _int) (h-src : _int)
+          (dst : _int) (x-dst : _int) (y-dst : _int)
+          (fg : _float) (bg : _float)
           -> _void)
     #:c-id TCOD_console_blit)
 
   (define-tcod console-clear
     (_fun _console -> _void)
     #:c-id TCOD_console_clear)
+
+  (define-tcod console-get-height-rect
+    (_fun _console _int _int _int _int _string -> _int)
+    #:c-id TCOD_console_get_height_rect)
 
   (define-tcod console-flush
     (_fun -> _void)
@@ -191,6 +200,10 @@
   (define-tcod console-print-ex
     (_fun _console _int _int _bkgnd_flag _alignment _string -> _void)
     #:c-id TCOD_console_print_ex)
+
+  (define-tcod console-print-rect-ex
+    (_fun _console _int _int _int _int _bkgnd_flag _alignment _string -> _int)
+    #:c-id TCOD_console_print_rect_ex)
 
   (define-tcod console-put-char
     (_fun _console _int _int _char _bkgnd_flag -> _void)
@@ -245,14 +258,16 @@
 (require/typed/provide 'ffi-console
   [#:opaque Console console?]
   [#:opaque Key key?]
-  [console-blit (-> Console Integer Integer Integer Integer Integer Integer Integer Void)]
+  [console-blit (->* (Console Integer Integer Integer Integer Integer Integer Integer) (Float Float) Void)]
   [console-clear (-> Console Void)]
+  [console-get-height-rect (-> Console Integer Integer Integer Integer String Integer)]
   [console-flush (-> Void)]
   [console-init-root (-> Integer Integer String Boolean Symbol Void)]
   [console-is-key-pressed (-> Symbol Boolean)]
   [console-is-window-closed (-> Boolean)]
   [console-new (-> Integer Integer Console)]
   [console-print-ex (-> Console Integer Integer Symbol Symbol String Void)]
+  [console-print-rect-ex (-> Console Integer Integer Integer Integer Symbol Symbol String Integer)]
   [console-put-char (-> Console Integer Integer Char Symbol Void)]
   [console-put-char-ex (-> Console Integer Integer Char Color Color Void)]
   [console-rect (-> Console Integer Integer Integer Integer Boolean Symbol Void)]

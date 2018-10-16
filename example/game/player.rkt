@@ -39,6 +39,25 @@
                                        #:power 5
                                        #:die player-die)))
 
+
+(define (player-attacking? player)
+  (eq? 'attacking (entity-state player)))
+
+(define (player-moving? player)
+  (eq? 'moving (entity-state player)))
+
+(define (player-picking-up-item? player)
+  (eq? 'picking-up-item (entity-state player)))
+
+(define (player-viewing-inventory? player)
+  (eq? 'viewing-inventory (entity-state player)))
+
+(define (pick-up-item? input)
+  (eq? #\g (key-c (game-input-key input))))
+
+(define (view-inventory? input)
+  (eq? #\i (key-c (game-input-key input))))
+
 (define (player-handle-input player input entities a-map)
   (define-values (dx dy) (input-move-deltas (key-vk (game-input-key input))))
   (define player-x (entity-x player))
@@ -48,8 +67,14 @@
   (define target-entity (any-fighter-being-attacked? move-to-x move-to-y
                                                      entities))
 
-  (cond [(eq? #\g (key-c (game-input-key input)))
-         (struct-copy entity player [state 'picking-up-item])]
+  (cond [(pick-up-item? input)  ; Player is picking up an item
+         (entity-set-state player 'picking-up-item)]
+
+        ; Player opened inventory and is viewing it
+        [(and (view-inventory? input) (not (player-viewing-inventory? player)))
+         (entity-set-state player 'viewing-inventory)]
+
+        ; Player is attacking another entity
         [(and target-entity (entity-alive? target-entity))
          ;(log-debug (format "Target: ~v" target-object))
          ; TODO: Maybe we could something here too with lenses, but don't force it if it doesn't help make the code more concise/simpler
@@ -65,15 +90,6 @@
          (if (tile-is-blocked? move-to-x move-to-y a-map entities)
              (entity-set-state player 'ideling)
              (struct-copy entity player [dx dx] [dy dy] [state 'moving]))]))
-
-(define (player-attacking? player)
-  (eq? 'attacking (entity-state player)))
-
-(define (player-moving? player)
-  (eq? 'moving (entity-state player)))
-
-(define (player-picking-up-item? player)
-  (eq? 'picking-up-item (entity-state player)))
 
 (define (player-update player entities items)
   ;(log-debug (format "Player state: ~v" player-state))
@@ -110,4 +126,4 @@
                                                       an-item))]
                         [state 'ideling]))
          (values new-player entities new-items)]
-        [else (values (entity-set-state player) entities items)]))
+        [else (values (entity-set-state player 'ideling) entities items)]))

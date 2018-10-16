@@ -1,6 +1,7 @@
 #lang racket
 
 (provide BAR-WIDTH
+         INVENTORY-WIDTH
          MSG-HEIGHT
          MSG-WIDTH
          MSG-X
@@ -19,3 +20,5 @@
 (define MSG-X (+ BAR-WIDTH 2))
 (define MSG-WIDTH (- SCREEN-WIDTH BAR-WIDTH 2))
 (define MSG-HEIGHT (sub1 PANEL-HEIGHT))
+
+(define INVENTORY-WIDTH 50)

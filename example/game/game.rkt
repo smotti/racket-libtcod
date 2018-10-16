@@ -1,6 +1,7 @@
 #lang racket
 
-(require racket/format
+(require (only-in data/collection length)
+         racket/format
          threading
 
          "../../color.rkt"
@@ -58,16 +59,20 @@
 
 (define (process-input state)
   (define-values (event key mouse) (check-for-input))
-  (define key-pressed (key-vk key))
+  (define key-pressed (key-vk (if (not (eq? 'player-viewing-inventory
+                                            (game-state-action state)))
+                                  key
+                                  (console-wait-for-keypress #t))))
 
   ;(log-debug "Process Input")
   ;(log-debug (format "Event: ~v --- Key: ~v --- Mouse: ~v"
   ;                   event key-pressed mouse))
 
   (define exit? (equal? 'ESCAPE key-pressed))
-  (define action (if (or (eq? 'NONE event)
-                         (eq? 'NONE key-pressed))
-                     'no-turn 'turn))
+  (define action (cond [(and (eq? 'CHAR key-pressed) (eq? #\i (key-c key)))
+                        'player-viewing-inventory]
+                       [(or (eq? 'NONE event) (eq? 'NONE key-pressed)) 'no-turn]
+                       [else 'turn]))
   (struct-copy game-state state
                [input (game-input event key mouse)] [exit exit?] [action action]))
 
@@ -82,7 +87,8 @@
                (player-handle-input (game-state-input state)
                                     entities
                                     (game-state-map state))
-               (player-update entities (game-state-items state))))
+               (player-update entities
+                              (game-state-items state))))
          (struct-copy game-state state
                       [player new-player] [entities new-entities]
                       [items new-items] [fov-recompute? #t])]))
@@ -164,6 +170,37 @@
                       x y
                       (entity-char an-entity)
                       'BKGND_NONE)))
+
+(define (render-menu header options width)
+  (cond [(not (>= (length options) 26))
+         (define header-height
+           (console-get-height-rect offscreen-console 0 0 width SCREEN-HEIGHT header))
+         (define height (+ (length options) header-height))
+         (define window (console-new width height))
+
+         (console-set-default-foreground window color-white)
+         (console-print-rect-ex window 0 0 width height 'BKGND_NONE 'LEFT header)
+
+         (for/fold ([y header-height]
+                    [letter-index (char->integer #\a)])
+                   ([option options])
+           (define text (format "(~a) ~a" (integer->char letter-index) option))
+           (console-print-ex window 0 y 'BKGND_NONE 'LEFT text)
+           (values (add1 y) (add1 letter-index)))
+
+         (define x (exact-round (- (/ SCREEN-WIDTH 2) (/ width 2))))
+         (define y (exact-round (- (/ SCREEN-HEIGHT 2) (/ height 2))))
+         (console-blit window 0 0 width height console-root x y 1.0 0.7)
+         (console-flush)]
+        [else (log-debug "Cannot have a menu with more than 26 options.")]))
+
+(define (render-inventory header inventory)
+  (render-menu header
+               (if (= 0 (length inventory))
+                   '("Inventory is empty.")
+                   (for/list ([item inventory])
+                     (entity-name item)))
+               INVENTORY-WIDTH))
 
 (define (clear x y fov-map)
   (when (map-is-in-fov fov-map x y)
@@ -282,6 +319,10 @@
   ;(log-debug "Render to root-console")
   (console-blit offscreen-console 0 0 MAP-WIDTH MAP-HEIGHT console-root 0 0)
   (console-flush)
+
+  (when (eq? 'player-viewing-inventory (game-state-action state))
+    (render-inventory "Press the key next to an item to use it, or any other to cancel."
+                      (entity-inventory player)))
 
   (struct-copy game-state state [fov-recompute? #f]))
 
