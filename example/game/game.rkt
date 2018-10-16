@@ -123,7 +123,10 @@
 
   (define current-entities
     (filter-map (lambda (enty) (and (entity-alive? enty)
-                                    (struct-copy entity enty [turn-taken? #f])))
+                                    (~> enty
+                                        (entity-get-component 'ai)
+                                        ai-reset-turn-taken
+                                        (entity-update-component enty 'ai _))))
                 (game-state-entities state)))
   (define dead-entities
     (append (game-state-dead state)
@@ -287,7 +290,7 @@
   (console-set-default-background panel color-black)
   (console-clear panel)
 
-  (define player-fighter (entity-fighter player))
+  (define player-fighter (entity-get-component player 'fighter))
   (render-bar panel
               1 1
               BAR-WIDTH
@@ -322,7 +325,7 @@
 
   (when (eq? 'player-viewing-inventory (game-state-action state))
     (render-inventory "Press the key next to an item to use it, or any other to cancel."
-                      (entity-inventory player)))
+                      (entity-get-component player 'inventory)))
 
   (struct-copy game-state state [fov-recompute? #f]))
 

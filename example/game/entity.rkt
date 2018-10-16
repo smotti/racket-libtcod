@@ -1,9 +1,14 @@
 #lang racket
 
-(provide entity-dead?
+(provide entity-alive?
+         entity-dead?
          entity-die
+         entity-get-component
+         entity-has-component?
          entity-move
          entity-set-state
+         entity-turn-taken?
+         entity-update-component
          place-entities
          )
 
@@ -11,14 +16,37 @@
          "../../console.rkt"
          "../../random.rkt"
 
-         "fighter-component.rkt"
+         "ai-types.rkt"
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
          )
 
+(define (entity-get-component an-entity component)
+  (hash-ref (entity-components an-entity) component (lambda () '())))
+
+(define (entity-update-component an-entity component new-component-value)
+  (define components (entity-components an-entity))
+  (struct-copy entity an-entity
+               [components (hash-update components
+                                        component
+                                        (lambda (_) new-component-value)
+                                        (lambda () components))]))
+
+(define (entity-has-component? an-entity component)
+  (hash-ref (entity-components an-entity) component (lambda () #f)))
+
+(define (entity-alive? an-entity)
+  (cond [(not (entity-has-component? an-entity 'fighter)) #f]
+        [else
+         (define fighter (entity-get-component an-entity 'fighter))
+         (> (fighter-hp fighter) 0)]))
+
 (define (entity-dead? an-entity)
   (not (entity-alive? an-entity)))
+
+(define (entity-turn-taken? an-entity)
+  (ai-type-turn-taken? (entity-get-component an-entity 'ai)))
 
 (define (entity-die an-entity)
   (message-add (format "~s is dead!" (entity-name an-entity))
@@ -26,7 +54,7 @@
   (struct-copy entity
                an-entity
                [char #\%] [color color-dark-red]
-               [blocks #f] [fighter #f] [ai #f]
+               [blocks #f] 
                [name (format "remains of ~s"
                              (entity-name an-entity))]
                [state 'dead]))

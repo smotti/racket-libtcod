@@ -5,7 +5,10 @@
          fighter-being-attacked?
          )
 
-(require "message-log.rkt"
+(require threading
+
+         "entity.rkt"
+         "message-log.rkt"
          "types.rkt"
          )
 
@@ -19,15 +22,15 @@
   (define-values (target-x target-y) (values (entity-x target)
                                              (entity-y target)))
   (and (= attacker-x target-x) (= attacker-y target-y)
-       (not (false? (entity-fighter target)))))
+       (entity-has-component? target 'fighter)))
 
 (define (fighter-deal-damage damage target-fighter)
   (struct-copy fighter target-fighter [hp (- (fighter-hp target-fighter)
                                              damage)]))
 
 (define (fighter-attack-target attacker-entity target-entity)
-  (define attacker (entity-fighter attacker-entity))
-  (define target (entity-fighter target-entity))
+  (define attacker (entity-get-component attacker-entity 'fighter))
+  (define target (entity-get-component target-entity 'fighter))
   (define damage (- (fighter-power attacker)
                     (fighter-defense target)))
 
@@ -39,11 +42,13 @@
          (define new-target (fighter-deal-damage damage target))
          ; TODO: Maybe here we can use a lens-transform with lens-compose
          (cond [(> (fighter-hp new-target) 0)
-                (struct-copy entity target-entity [fighter new-target])]
-               [else (struct-copy entity
-                                  ((fighter-die new-target) target-entity)
-                                  [fighter (struct-copy fighter new-target
-                                                        [hp 0])])])]
+                (entity-update-component target-entity 'fighter new-target)]
+               [else
+                (~> ((fighter-die new-target) target-entity)
+                    (entity-update-component 'fighter
+                                             (struct-copy fighter
+                                                          new-target
+                                                          [hp 0])))])]
         [else
          (message-add (format "~s attacks ~s but is has no effect!"
                               (entity-name attacker-entity)

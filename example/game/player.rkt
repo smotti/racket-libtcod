@@ -6,6 +6,7 @@
          player-update)
 
 (require racket/format
+         threading
 
          "../../color.rkt"
          "../../console.rkt"
@@ -24,20 +25,18 @@
   (message-add "You died!" #:color color-red)
   (struct-copy entity
                an-entity
-               [char #\%] [color color-dark-red]
-               [alive? #f]))
+               [blocks #f]
+               [char #\%] [color color-dark-red]))
 
 (define (make-player x y name)
-  (make-entity x y
-               #\@ 'player
-               name
-               'ideling
-               0 0
-               (make-inventory)
-               #:fighter (make-fighter #:hp 30
-                                       #:defense 2
-                                       #:power 5
-                                       #:die player-die)))
+  (make-entity #\@ name
+               'ideling 'player
+               #:components (hash 'fighter (make-fighter #:hp 30
+                                                         #:defense 2
+                                                         #:power 5
+                                                         #:die player-die)
+                                  'inventory (make-inventory))
+               #:x x #:y y))
 
 
 (define (player-attacking? player)
@@ -62,7 +61,7 @@
   (define-values (dx dy) (input-move-deltas (key-vk (game-input-key input))))
   (define player-x (entity-x player))
   (define player-y (entity-y player))
-  (define player-fighter (entity-fighter player))
+  (define player-fighter (entity-get-component player 'fighter))
   (define-values (move-to-x move-to-y) (values (+ player-x dx) (+ player-y dy)))
   (define target-entity (any-fighter-being-attacked? move-to-x move-to-y
                                                      entities))
@@ -82,10 +81,9 @@
            (struct-copy fighter
                         player-fighter
                         [target target-entity]))
-         (struct-copy entity
-                      player
-                      [fighter new-player-fighter]
-                      [state 'attacking])]
+         (~> player
+             (entity-update-component 'fighter new-player-fighter)
+             (entity-set-state 'attacking))]
         [else
          (if (tile-is-blocked? move-to-x move-to-y a-map entities)
              (entity-set-state player 'ideling)
@@ -94,7 +92,7 @@
 (define (player-update player entities items)
   ;(log-debug (format "Player state: ~v" player-state))
   (cond [(player-attacking? player)
-         (define player-fighter (entity-fighter player))
+         (define player-fighter (entity-get-component player 'fighter))
          (define attacked-entity
            (fighter-attack-target player (fighter-target player-fighter)))
          (define new-entities (for/list ([enty entities])
@@ -108,7 +106,7 @@
                                     #f
                                     attacked-entity)]))
          (define new-player
-           (struct-copy entity player [fighter new-player-fighter]))
+           (entity-update-component player 'fighter new-player-fighter))
          (values new-player new-entities items)]
         [(player-moving? player)
          (define new-player (entity-move player))
@@ -118,12 +116,14 @@
         [(player-picking-up-item? player)
          (define-values (an-item new-items)
            (item-pick-up `#(,(entity-x player) ,(entity-y player)) items))
+         (define player-inventory (entity-get-component player 'inventory))
          (define new-player
-           (struct-copy entity player
-                        [inventory (if (not an-item)
-                                       (entity-inventory player)
-                                       (inventory-add (entity-inventory player)
-                                                      an-item))]
-                        [state 'ideling]))
+           (~> player
+               (entity-update-component 'inventory
+                                        (if (not an-item)
+                                            player-inventory
+                                            (inventory-add player-inventory
+                                                           an-item)))
+               (entity-set-state 'ideling)))
          (values new-player entities new-items)]
         [else (values (entity-set-state player 'ideling) entities items)]))

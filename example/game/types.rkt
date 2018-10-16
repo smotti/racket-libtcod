@@ -26,43 +26,62 @@
 ;;;
 
 (struct entity
-  (x y dx dy
+  (blocks
    char color
-   type
+   components
+   dx dy
    name
    state
-   blocks
-   inventory
-   fighter
-   ai
-   turn-taken?
-   alive?)
+   type
+   x y)
   #:transparent)
 
-(define (make-entity x y
-                     char
-                     type
-                     name
-                     state
-                     [dx 0] [dy 0]
-                     [inventory (pvector)]
-                     [color color-white]
-                     [turn-taken? #f]
-                     [alive? #t]
+(define (make-entity char name
+                     state type
+                     [color color-white] [dx 0] [dy 0]
                      #:blocks [blocks #t]
-                     #:fighter [a-fighter #f]
-                     #:ai [an-ai #f])
-  (entity x y
-          dx dy
-          char
-          color
-          type
-          name
-          state
-          blocks
-          inventory
-          a-fighter an-ai
-          turn-taken? alive?))
+                     #:components [components (make-immutable-hash)]
+                     #:x [x 0] #:y [y 0])
+  (entity blocks char color components dx dy name state type x y))
+
+;(struct entity
+;  (x y dx dy
+;   char color
+;   type
+;   name
+;   state
+;   blocks
+;   inventory
+;   fighter
+;   ai
+;   turn-taken?
+;   alive?)
+;  #:transparent)
+
+;(define (make-entity x y
+;                     char
+;                     type
+;                     name
+;                     state
+;                     [dx 0] [dy 0]
+;                     [inventory (pvector)]
+;                     [color color-white]
+;                     [turn-taken? #f]
+;                     [alive? #t]
+;                     #:blocks [blocks #t]
+;                     #:fighter [a-fighter #f]
+;                     #:ai [an-ai #f])
+;  (entity x y
+;          dx dy
+;          char
+;          color
+;          type
+;          name
+;          state
+;          blocks
+;          inventory
+;          a-fighter an-ai
+;          turn-taken? alive?))
 
 ;;;
 ;;; Game state types

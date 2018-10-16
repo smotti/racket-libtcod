@@ -15,7 +15,6 @@
          "../../fov.rkt"
          "../../random.rkt"
 
-         "ai-types.rkt"
          "types.rkt")
 ;;;
 ;;; Map tile

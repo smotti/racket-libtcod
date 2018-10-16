@@ -1,6 +1,7 @@
 #lang racket
 
 (provide ai-handle-state-transition
+         ai-reset-turn-taken
          ai-update
          make-monster-ai
          (struct-out monster-ai)
@@ -19,7 +20,6 @@
          "message-log.rkt"
          "types.rkt"
          )
-
 
 (define (distance-to from to)
   (define dx (- (entity-x to) (entity-x from)))
@@ -45,16 +45,22 @@
       (entity-move an-entity #:dx ddx #:dy ddy)))
 
 (define (ai-handle-state-transition an-entity player fov-map)
-  (define an-entity-ai (entity-ai an-entity))
-  (cond [(monster-ai? an-entity-ai)
+  (define an-entity-ai (entity-get-component an-entity 'ai))
+  (cond [(ai-type-monster? an-entity-ai)
          (monster-ai-handle-state-transition an-entity player fov-map)]
         [else an-entity]))
 
 (define (ai-update an-entity player a-map entities)
-  (define an-entity-ai (entity-ai an-entity))
-  (cond [(monster-ai? an-entity-ai)
+  (define an-entity-ai (entity-get-component an-entity 'ai))
+  (cond [(ai-type-monster? an-entity-ai)
          (monster-ai-update an-entity player a-map entities)]
         [else (values an-entity player)]))
+
+(define (ai-take-turn an-ai)
+  (struct-copy ai-type an-ai [turn-taken? #t]))
+
+(define (ai-reset-turn-taken an-ai)
+  (struct-copy ai-type an-ai [turn-taken? #f]))
 
 (define (monster-attacking? a-monster)
   (eq? 'attacking (entity-state a-monster)))
@@ -98,34 +104,35 @@
             [else a-monster])))
 
 (define (monster-ai-update a-monster player a-map entities)
+  (define a-monster-fighter (entity-get-component a-monster 'fighter))
+  (define ai (ai-take-turn (entity-get-component a-monster 'ai)))
   (cond [(monster-ideling? a-monster)
-         (define a-monster-fighter (entity-fighter a-monster))
-         (if (not (fighter? a-monster-fighter))
-             (values (struct-copy entity a-monster [turn-taken? #t]) player)
-             ; TODO: Use lens here
-             (values (struct-copy entity a-monster
-                                  [turn-taken? #t]
-                                  [fighter (struct-copy fighter a-monster-fighter
-                                                        [target #f])])
+         (if (not a-monster-fighter)
+             (values (entity-update-component a-monster 'ai ai)
+                     player)
+             (values (~> a-monster
+                         (entity-update-component 'ai ai)
+                         (entity-update-component 'fighter
+                                                  (struct-copy fighter
+                                                               a-monster-fighter
+                                                               [target #f])))
                      player))]
         [(monster-chasing? a-monster)
          (define new-a-monster-fighter
-           (struct-copy fighter (entity-fighter a-monster) [target #f]))
-         (values (struct-copy entity
-                              (move-towards a-monster
-                                            (entity-x player)
-                                            (entity-y player)
-                                            a-map
-                                            entities)
-                              [turn-taken? #t])
+           (struct-copy fighter a-monster-fighter [target #f]))
+         (values (~> a-monster
+                     (move-towards (entity-x player)
+                                   (entity-y player)
+                                   a-map
+                                   entities)
+                     (entity-update-component 'ai ai)
+                     (entity-update-component 'fighter new-a-monster-fighter))
                  player)]
         [(monster-attacking? a-monster)
 ;         (log-debug "My position: ~v - ~v"
 ;                    (entity-x a-monster) (entity-y a-monster))
 ;         (log-debug "Attack player at: ~v ~v"
 ;                    (entity-x player) (entity-y player))
-         (define a-monster-fighter (entity-fighter a-monster))
          (define new-player-entity (fighter-attack-target a-monster player))
-         (values (struct-copy entity a-monster [turn-taken? #t])
-                 new-player-entity)]
-        [else (values (struct-copy entity a-monster [turn-taken? #t]) player)]))
+         (values (entity-update-component a-monster 'ai ai) new-player-entity)]
+        [else (values (entity-update-component a-monster 'ai ai) player)]))

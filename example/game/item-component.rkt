@@ -22,11 +22,11 @@
   (define new-items (hash-remove items item-idx))
   (values an-item new-items))
 
-(define (make-item x y char name)
-  (make-entity x y char 'item name 'laying 0 0 (make-immutable-hash) color-violet))
+(define (make-item char name)
+  (make-entity char name 'laying 'item color-violet #:blocks #f))
 
 ;; NOTE or TODO: Only makes healing potions for now
 (define (generate-items [number MAX-NUMBER-ITEMS])
   (for/list ([i number])
-    (make-item 0 0 #\! "healing potion")))
+    (make-item #\! "healing potion")))
 

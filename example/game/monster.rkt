@@ -10,6 +10,7 @@
          "../../random.rkt"
 
          "ai.rkt"
+         "ai-types.rkt"
          "inventory.rkt"
          "message-log.rkt"
          "types.rkt")
@@ -18,42 +19,30 @@
   (for/list ([i number])
     (define choice (random-default-get-int 0 100))
     (cond [(< choice 80)
-           (make-entity 0 0
-                        #\o 
-                        'monster
-                        "Orc"
-                        'ideling
-                        0 0
-                        (make-inventory)
+           (make-entity #\o "Orc"
+                        'ideling 'monster
                         color-desaturated-green
-                        #:blocks #t
-                        #:fighter (make-fighter
-                                   #:hp 10
-                                   #:defense 0
-                                   #:power 3
-                                   #:die monster-die)
-                        #:ai (make-monster-ai #t #t))]
+                        #:components (hash 'fighter
+                                           (make-fighter #:hp 10
+                                                         #:defense 0
+                                                         #:power 3
+                                                         #:die monster-die)
+                                           'ai (make-monster-ai #t #t)))]
           [else
-           (make-entity 0 0
-                        #\T
-                        'monster
-                        "Troll"
-                        'ideling
-                        0 0
-                        (make-inventory)
+           (make-entity #\T "Troll"
+                        'ideling 'monster
                         color-darker-green
-                        #:blocks #t
-                        #:fighter (make-fighter
-                                   #:hp 16
-                                   #:defense 1
-                                   #:power 4
-                                   #:die monster-die)
-                        #:ai (make-monster-ai #t #t))])))
+                        #:components (hash 'fighter
+                                           (make-fighter #:hp 16
+                                                         #:defense 1
+                                                         #:power 4
+                                                         #:die monster-die)
+                                           'ai (make-monster-ai #t #t)))])))
 
 (define (monster-die an-entity)
   (message-add (format "~a is dead!" (entity-name an-entity)))
   (struct-copy entity an-entity
                [char #\%]
                [color color-dark-red]
-               [alive? #f] [blocks #f]
+               [blocks #f]
                [name (format "Remains of ~a" (entity-name an-entity))]))
