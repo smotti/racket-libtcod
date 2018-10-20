@@ -11,6 +11,7 @@
          "../../color.rkt"
          "../../console.rkt"
 
+         "component.rkt"
          "fighter-component.rkt"
          "entity.rkt"
          "inventory.rkt"
@@ -38,6 +39,8 @@
                                   'inventory (make-inventory))
                #:x x #:y y))
 
+(define (input-key-c->item-idx a-key-char)
+  (- (char->integer a-key-char) (char->integer #\a)))
 
 (define (player-attacking? player)
   (eq? 'attacking (entity-state player)))
@@ -47,6 +50,12 @@
 
 (define (player-picking-up-item? player)
   (eq? 'picking-up-item (entity-state player)))
+
+(define (player-selected-item? keycode)
+  (eq? 'CHAR keycode))
+
+(define (player-using-item? player)
+  (eq? 'using-item (entity-state player)))
 
 (define (player-viewing-inventory? player)
   (eq? 'viewing-inventory (entity-state player)))
@@ -61,7 +70,7 @@
   (define-values (dx dy) (input-move-deltas (key-vk (game-input-key input))))
   (define player-x (entity-x player))
   (define player-y (entity-y player))
-  (define player-fighter (entity-get-component player 'fighter))
+  (define player-fighter (component-get player 'fighter))
   (define-values (move-to-x move-to-y) (values (+ player-x dx) (+ player-y dy)))
   (define target-entity (any-fighter-being-attacked? move-to-x move-to-y
                                                      entities))
@@ -73,6 +82,12 @@
         [(and (view-inventory? input) (not (player-viewing-inventory? player)))
          (entity-set-state player 'viewing-inventory)]
 
+        ; Player is viewing the inventory and pressed a item key
+        [(and (player-viewing-inventory? player)
+              (player-selected-item? (key-vk (game-input-key input))))
+         ;(log-debug "Player wants to use item: ~a" (key-c (game-input-key input)))
+         (entity-set-state player 'using-item)]
+
         ; Player is attacking another entity
         [(and target-entity (entity-alive? target-entity))
          ;(log-debug (format "Target: ~v" target-object))
@@ -82,17 +97,27 @@
                         player-fighter
                         [target target-entity]))
          (~> player
-             (entity-update-component 'fighter new-player-fighter)
+             (component-update 'fighter new-player-fighter)
              (entity-set-state 'attacking))]
+
+        ; Player is moving or bumping into a wall
         [else
          (if (tile-is-blocked? move-to-x move-to-y a-map entities)
              (entity-set-state player 'ideling)
              (struct-copy entity player [dx dx] [dy dy] [state 'moving]))]))
 
-(define (player-update player entities items)
-  ;(log-debug (format "Player state: ~v" player-state))
-  (cond [(player-attacking? player)
-         (define player-fighter (entity-get-component player 'fighter))
+(define (player-update player entities items input)
+  (cond [(player-using-item? player)  ; Handle item usage
+         (define item-idx (input-key-c->item-idx (key-c (game-input-key input))))
+         ;(log-debug "Use item at inventory location: ~v" item-idx)
+         (values (entity-use-item player item-idx) entities items)]
+
+        ; If player is viewing inventory don't update
+        [(player-viewing-inventory? player) (values player entities items)]
+
+        ; Handle attack
+        [(player-attacking? player)
+         (define player-fighter (component-get player 'fighter))
          (define attacked-entity
            (fighter-attack-target player (fighter-target player-fighter)))
          (define new-entities (for/list ([enty entities])
@@ -106,24 +131,30 @@
                                     #f
                                     attacked-entity)]))
          (define new-player
-           (entity-update-component player 'fighter new-player-fighter))
+           (component-update player 'fighter new-player-fighter))
          (values new-player new-entities items)]
+
+        ; Handle moving
         [(player-moving? player)
          (define new-player (entity-move player))
 ;         (log-debug "Player moves to: ~v - ~v"
 ;                    (entity-x new-player) (entity-y new-player))
          (values new-player entities items)]
+
+        ; Handle item pick up
         [(player-picking-up-item? player)
          (define-values (an-item new-items)
            (item-pick-up `#(,(entity-x player) ,(entity-y player)) items))
-         (define player-inventory (entity-get-component player 'inventory))
+         (define player-inventory (component-get player 'inventory))
          (define new-player
            (~> player
-               (entity-update-component 'inventory
-                                        (if (not an-item)
-                                            player-inventory
-                                            (inventory-add player-inventory
-                                                           an-item)))
+               (component-update 'inventory
+                                 (if (not an-item)
+                                     player-inventory
+                                     (inventory-add player-inventory
+                                                    an-item)))
                (entity-set-state 'ideling)))
          (values new-player entities new-items)]
+
+        ; Handle player doing nothing
         [else (values (entity-set-state player 'ideling) entities items)]))

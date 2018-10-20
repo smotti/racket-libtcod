@@ -14,6 +14,7 @@
          "../../fov.rkt"
 
          "ai-types.rkt"
+         "component.rkt"
          "fighter-component.rkt"
          "entity.rkt"
          "map.rkt"
@@ -45,13 +46,13 @@
       (entity-move an-entity #:dx ddx #:dy ddy)))
 
 (define (ai-handle-state-transition an-entity player fov-map)
-  (define an-entity-ai (entity-get-component an-entity 'ai))
+  (define an-entity-ai (component-get an-entity 'ai))
   (cond [(ai-type-monster? an-entity-ai)
          (monster-ai-handle-state-transition an-entity player fov-map)]
         [else an-entity]))
 
 (define (ai-update an-entity player a-map entities)
-  (define an-entity-ai (entity-get-component an-entity 'ai))
+  (define an-entity-ai (component-get an-entity 'ai))
   (cond [(ai-type-monster? an-entity-ai)
          (monster-ai-update an-entity player a-map entities)]
         [else (values an-entity player)]))
@@ -104,15 +105,15 @@
             [else a-monster])))
 
 (define (monster-ai-update a-monster player a-map entities)
-  (define a-monster-fighter (entity-get-component a-monster 'fighter))
-  (define ai (ai-take-turn (entity-get-component a-monster 'ai)))
+  (define a-monster-fighter (component-get a-monster 'fighter))
+  (define ai (ai-take-turn (component-get a-monster 'ai)))
   (cond [(monster-ideling? a-monster)
          (if (not a-monster-fighter)
-             (values (entity-update-component a-monster 'ai ai)
+             (values (component-update a-monster 'ai ai)
                      player)
              (values (~> a-monster
-                         (entity-update-component 'ai ai)
-                         (entity-update-component 'fighter
+                         (component-update 'ai ai)
+                         (component-update 'fighter
                                                   (struct-copy fighter
                                                                a-monster-fighter
                                                                [target #f])))
@@ -125,8 +126,8 @@
                                    (entity-y player)
                                    a-map
                                    entities)
-                     (entity-update-component 'ai ai)
-                     (entity-update-component 'fighter new-a-monster-fighter))
+                     (component-update 'ai ai)
+                     (component-update 'fighter new-a-monster-fighter))
                  player)]
         [(monster-attacking? a-monster)
 ;         (log-debug "My position: ~v - ~v"
@@ -134,5 +135,5 @@
 ;         (log-debug "Attack player at: ~v ~v"
 ;                    (entity-x player) (entity-y player))
          (define new-player-entity (fighter-attack-target a-monster player))
-         (values (entity-update-component a-monster 'ai ai) new-player-entity)]
-        [else (values (entity-update-component a-monster 'ai ai) player)]))
+         (values (component-update a-monster 'ai ai) new-player-entity)]
+        [else (values (component-update a-monster 'ai ai) player)]))

@@ -33,7 +33,7 @@
            key-rmeta
            key-rctrl
            key-shift
-           key-txt
+           key-text
            key-vk
            make-key-default
            )
@@ -132,7 +132,7 @@
 
   (define-cstruct _key ([vk _keycode]
                         [c _char]
-                        [txt _string]
+                        [text _string]
                         [pressed _bool]
                         [lalt _bool]
                         [lctrl _bool]
@@ -285,6 +285,7 @@
   [key-rctrl (-> Key Boolean)]
   [key-rmeta (-> Key Boolean)]
   [key-shift (-> Key Boolean)]
+  [key-text (-> Key String)]
   [key-vk (-> Key Symbol)]
   [make-key-default (-> Key)]
   )

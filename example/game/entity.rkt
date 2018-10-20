@@ -3,50 +3,40 @@
 (provide entity-alive?
          entity-dead?
          entity-die
-         entity-get-component
-         entity-has-component?
          entity-move
          entity-set-state
          entity-turn-taken?
-         entity-update-component
+         entity-use-item
          place-entities
          )
 
-(require "../../color.rkt"
+(require (only-in data/collection length)
+         "../../color.rkt"
          "../../console.rkt"
          "../../random.rkt"
 
          "ai-types.rkt"
+         "component.rkt"
+         "inventory.rkt"
+         "item-component.rkt"
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
          )
 
-(define (entity-get-component an-entity component)
-  (hash-ref (entity-components an-entity) component (lambda () '())))
 
-(define (entity-update-component an-entity component new-component-value)
-  (define components (entity-components an-entity))
-  (struct-copy entity an-entity
-               [components (hash-update components
-                                        component
-                                        (lambda (_) new-component-value)
-                                        (lambda () components))]))
-
-(define (entity-has-component? an-entity component)
-  (hash-ref (entity-components an-entity) component (lambda () #f)))
 
 (define (entity-alive? an-entity)
-  (cond [(not (entity-has-component? an-entity 'fighter)) #f]
+  (cond [(not (has-component? an-entity 'fighter)) #f]
         [else
-         (define fighter (entity-get-component an-entity 'fighter))
+         (define fighter (component-get an-entity 'fighter))
          (> (fighter-hp fighter) 0)]))
 
 (define (entity-dead? an-entity)
   (not (entity-alive? an-entity)))
 
 (define (entity-turn-taken? an-entity)
-  (ai-type-turn-taken? (entity-get-component an-entity 'ai)))
+  (ai-type-turn-taken? (component-get an-entity 'ai)))
 
 (define (entity-die an-entity)
   (message-add (format "~s is dead!" (entity-name an-entity))
@@ -70,6 +60,18 @@
 (define (entity-set-state an-entity new-state)
   (struct-copy entity an-entity [state new-state]))
 
+(define (entity-use-item an-entity item-idx)
+  (define entity-inventory (component-get an-entity 'inventory))
+  (cond [(not (< item-idx (length entity-inventory)))
+         an-entity]
+        [else
+         (define new-entity (item-use (inventory-get entity-inventory item-idx) an-entity))
+         (if (not new-entity)
+             an-entity
+             (component-update new-entity
+                               'inventory
+                               (inventory-remove entity-inventory item-idx)))]))
+
 ; NOTE: This could probably also check the fov map so that entities don't get
 ; placed too close to the player.
 ; NOTE: Eagerly trying to place an entity might not the best idea, instead it
@@ -79,7 +81,9 @@
     (define x (random-default-get-int 0 (- MAP-WIDTH 1)))
     (define y (random-default-get-int 0 (- MAP-HEIGHT 1)))
     (cond [(not (tile-is-blocked? x y a-map placed))
-           (struct-copy entity enty [x x] [y y])]
+           (if (item? enty)
+               (struct-copy item enty [x #:parent entity x] [y #:parent entity y])
+               (struct-copy entity enty [x x] [y y]))]
           ; Eagerly try to place the entity
           [else (place-entity enty placed)]))
   (for/fold ([placed '()])

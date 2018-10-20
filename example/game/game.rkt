@@ -11,6 +11,7 @@
          "../../sys.rkt"
 
          "ai.rkt"
+         "component.rkt"
          "game-constants.rkt"
          "entity.rkt"
          "item-component.rkt"
@@ -57,12 +58,17 @@
 (define (check-for-input)
   (sys-check-for-event 'KEY_PRESS_MOUSE_MOVE))
 
+(define (wait-for-input)
+  (sys-wait-for-event 'KEY_PRESS_MOUSE_MOVE #t))
+
 (define (process-input state)
-  (define-values (event key mouse) (check-for-input))
-  (define key-pressed (key-vk (if (not (eq? 'player-viewing-inventory
-                                            (game-state-action state)))
-                                  key
-                                  (console-wait-for-keypress #t))))
+  (define-values (event key mouse)
+    (if (not (eq? 'player-viewing-inventory
+                  (game-state-action state)))
+        (check-for-input)
+        (wait-for-input)))
+  
+  (define key-pressed (key-vk key))
 
   ;(log-debug "Process Input")
   ;(log-debug (format "Event: ~v --- Key: ~v --- Mouse: ~v"
@@ -88,7 +94,8 @@
                                     entities
                                     (game-state-map state))
                (player-update entities
-                              (game-state-items state))))
+                              (game-state-items state)
+                              (game-state-input state))))
          (struct-copy game-state state
                       [player new-player] [entities new-entities]
                       [items new-items] [fov-recompute? #t])]))
@@ -124,9 +131,9 @@
   (define current-entities
     (filter-map (lambda (enty) (and (entity-alive? enty)
                                     (~> enty
-                                        (entity-get-component 'ai)
+                                        (component-get 'ai)
                                         ai-reset-turn-taken
-                                        (entity-update-component enty 'ai _))))
+                                        (component-update enty 'ai _))))
                 (game-state-entities state)))
   (define dead-entities
     (append (game-state-dead state)
@@ -290,7 +297,7 @@
   (console-set-default-background panel color-black)
   (console-clear panel)
 
-  (define player-fighter (entity-get-component player 'fighter))
+  (define player-fighter (component-get player 'fighter))
   (render-bar panel
               1 1
               BAR-WIDTH
@@ -325,7 +332,7 @@
 
   (when (eq? 'player-viewing-inventory (game-state-action state))
     (render-inventory "Press the key next to an item to use it, or any other to cancel."
-                      (entity-get-component player 'inventory)))
+                      (component-get player 'inventory)))
 
   (struct-copy game-state state [fov-recompute? #f]))
 

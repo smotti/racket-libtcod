@@ -7,7 +7,7 @@
 
 (require threading
 
-         "entity.rkt"
+         "component.rkt"
          "message-log.rkt"
          "types.rkt"
          )
@@ -22,15 +22,15 @@
   (define-values (target-x target-y) (values (entity-x target)
                                              (entity-y target)))
   (and (= attacker-x target-x) (= attacker-y target-y)
-       (entity-has-component? target 'fighter)))
+       (has-component? target 'fighter)))
 
 (define (fighter-deal-damage damage target-fighter)
   (struct-copy fighter target-fighter [hp (- (fighter-hp target-fighter)
                                              damage)]))
 
 (define (fighter-attack-target attacker-entity target-entity)
-  (define attacker (entity-get-component attacker-entity 'fighter))
-  (define target (entity-get-component target-entity 'fighter))
+  (define attacker (component-get attacker-entity 'fighter))
+  (define target (component-get target-entity 'fighter))
   (define damage (- (fighter-power attacker)
                     (fighter-defense target)))
 
@@ -42,13 +42,13 @@
          (define new-target (fighter-deal-damage damage target))
          ; TODO: Maybe here we can use a lens-transform with lens-compose
          (cond [(> (fighter-hp new-target) 0)
-                (entity-update-component target-entity 'fighter new-target)]
+                (component-update target-entity 'fighter new-target)]
                [else
                 (~> ((fighter-die new-target) target-entity)
-                    (entity-update-component 'fighter
-                                             (struct-copy fighter
-                                                          new-target
-                                                          [hp 0])))])]
+                    (component-update 'fighter
+                                      (struct-copy fighter
+                                                   new-target
+                                                   [hp 0])))])]
         [else
          (message-add (format "~s attacks ~s but is has no effect!"
                               (entity-name attacker-entity)
