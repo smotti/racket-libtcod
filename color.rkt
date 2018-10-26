@@ -10,9 +10,11 @@
           color-darker-red
           color-desaturated-green
           color-green
+          color-light-blue
           color-light-gray
           color-light-red
           color-light-violet
+          color-light-yellow
           color-orange
           color-red
           color-violet
@@ -44,9 +46,11 @@
   (define-tcod color-darker-red _color #:c-id TCOD_darker_red)
   (define-tcod color-desaturated-green _color #:c-id TCOD_desaturated_green)
   (define-tcod color-green _color #:c-id TCOD_green)
+  (define-tcod color-light-blue _color #:c-id TCOD_light_blue)
   (define-tcod color-light-gray _color #:c-id TCOD_light_gray)
   (define-tcod color-light-red _color #:c-id TCOD_light_red)
   (define-tcod color-light-violet _color #:c-id TCOD_light_violet)
+  (define-tcod color-light-yellow _color #:c-id TCOD_light_yellow)
   (define-tcod color-orange _color #:c-id TCOD_orange)
   (define-tcod color-red _color #:c-id TCOD_red)
   (define-tcod color-violet _color #:c-id TCOD_violet)
@@ -62,9 +66,11 @@
   [color-darker-red Color]
   [color-desaturated-green Color]
   [color-green Color]
+  [color-light-blue Color]
   [color-light-gray Color]
   [color-light-red Color]
   [color-light-violet Color]
+  [color-light-yellow Color]
   [color-orange Color]
   [color-red Color]
   [color-violet Color]
