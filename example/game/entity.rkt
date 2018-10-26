@@ -5,6 +5,7 @@
          entity-die
          entity-move
          entity-set-state
+         entity-target-item
          entity-turn-taken?
          entity-use-item
          place-entities
@@ -59,6 +60,20 @@
 
 (define (entity-set-state an-entity new-state)
   (struct-copy entity an-entity [state new-state]))
+
+;; an-entity is using an item that targets another entity.
+(define (entity-target-item an-entity a-target item-idx)
+  (define entity-inventory (component-get an-entity 'inventory))
+  (cond [(not (< item-idx (length entity-inventory)))
+         (values an-entity a-target)]
+        [else
+         (define new-target
+           (item-use (inventory-get entity-inventory item-idx) a-target))
+         (define new-player
+           (component-update an-entity
+                             'inventory
+                             (inventory-remove entity-inventory item-idx)))
+         (values new-player new-target)]))
 
 (define (entity-use-item an-entity item-idx)
   (define entity-inventory (component-get an-entity 'inventory))

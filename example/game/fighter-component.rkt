@@ -3,6 +3,7 @@
 (provide any-fighter-being-attacked?
          fighter-attack-target
          fighter-being-attacked?
+         fighter-deal-damage
          )
 
 (require threading

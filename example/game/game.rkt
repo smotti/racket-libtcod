@@ -67,7 +67,7 @@
                   (game-state-action state)))
         (check-for-input)
         (wait-for-input)))
-  
+
   (define key-pressed (key-vk key))
 
   ;(log-debug "Process Input")
@@ -86,7 +86,7 @@
   (define player (game-state-player state))
   (cond [(equal? 'no-turn (game-state-action state)) state]
         [(entity-dead? player) state]
-        [else 
+        [else
          (define entities (game-state-entities state))
          (define-values (new-player new-entities new-items)
            (~> player
@@ -95,7 +95,8 @@
                                     (game-state-map state))
                (player-update entities
                               (game-state-items state)
-                              (game-state-input state))))
+                              (game-state-input state)
+                              (game-state-fov-map state))))
          (struct-copy game-state state
                       [player new-player] [entities new-entities]
                       [items new-items] [fov-recompute? #t])]))
@@ -129,7 +130,8 @@
                                      [player new-player])))]))
 
   (define current-entities
-    (filter-map (lambda (enty) (and (entity-alive? enty)
+    (filter-map (lambda (enty) (and (not (null? enty))
+                                    (entity-alive? enty)
                                     (~> enty
                                         (component-get 'ai)
                                         ai-reset-turn-taken
@@ -137,7 +139,8 @@
                 (game-state-entities state)))
   (define dead-entities
     (append (game-state-dead state)
-            (filter (lambda (enty) (entity-dead? enty))
+            (filter (lambda (enty) (and (not (null? enty))
+                                        (entity-dead? enty)))
                     (game-state-entities state))))
   (if (or (not (eq? 'turn (game-state-action state)))
           (null? current-entities))
@@ -170,6 +173,7 @@
                     (format "~a: ~a/~a" name value maximum)))
 
 (define (render-entity an-entity fov-map)
+  ;(log-debug "Render entity: ~v" an-entity)
   (define x (entity-x an-entity))
   (define y (entity-y an-entity))
 
@@ -220,7 +224,7 @@
   ;(log-debug "Clear old position of entities")
   (for-each (lambda (enty)
               (clear (entity-x enty) (entity-y enty) fov-map))
-            entities))
+            (cons player entities)))
 
 (define (names-under-mouse input entities fov-map)
   (define mouse (game-input-mouse input))
@@ -279,14 +283,17 @@
            (set-tile-explored?! a-tile #t)]))))
 
   ;(log-debug "Render items")
+  ;(log-debug "~v" (game-state-items state))
   (hash-for-each (game-state-items state)
-                 (lambda (_ enty) (render-entity enty fov-map)))
+                 (lambda (_ enty) (when enty (render-entity enty fov-map))))
 
   ;(log-debug "Render dead entites")
+  ;(log-debug "~v" (game-state-dead state))
   (for-each (lambda (enty) (render-entity enty fov-map))
             (game-state-dead state))
 
   ;(log-debug "Render alive entities")
+  ;(log-debug "~v" (game-state-entities state))
   (for-each (lambda (enty) (render-entity enty fov-map))
             (game-state-entities state))
 
@@ -353,7 +360,7 @@
 (sys-set-fps 60)
 (define initial-game-state
   (let-values ([(a-map player-start-position) (make-map)]
-               [(monsters) (generate-monsters 30)]
+               [(monsters) (generate-monsters 3)]
                [(items) (generate-items)])
     (define player (make-player (car player-start-position)
                                 (cdr player-start-position)

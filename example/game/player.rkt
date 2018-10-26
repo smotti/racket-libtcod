@@ -10,6 +10,7 @@
 
          "../../color.rkt"
          "../../console.rkt"
+         "../../fov.rkt"
 
          "component.rkt"
          "fighter-component.rkt"
@@ -21,6 +22,24 @@
          "types.rkt"
          "utils.rkt"
          )
+
+(define (find-closest-entity player entities within-range fov-map)
+  (for/fold ([closest-entity '()]
+             [closest-distance (add1 within-range)]
+             [entities-not-in-range '()]
+             #:result (values closest-entity entities-not-in-range))
+            ([ntt entities])
+    (cond [(and (has-component? ntt 'fighter)
+                (map-is-in-fov fov-map (entity-x ntt) (entity-y ntt)))
+           (define distance (distance-to player ntt))
+           (if (< distance closest-distance)
+               (values ntt distance entities-not-in-range)
+               (values closest-entity
+                       closest-distance
+                       (cons ntt entities-not-in-range)))]
+          [else (values closest-entity
+                        closest-distance
+                        (cons ntt entities-not-in-range))])))
 
 (define (player-die an-entity)
   (message-add "You died!" #:color color-red)
@@ -91,7 +110,6 @@
         ; Player is attacking another entity
         [(and target-entity (entity-alive? target-entity))
          ;(log-debug (format "Target: ~v" target-object))
-         ; TODO: Maybe we could something here too with lenses, but don't force it if it doesn't help make the code more concise/simpler
          (define new-player-fighter
            (struct-copy fighter
                         player-fighter
@@ -106,11 +124,23 @@
              (entity-set-state player 'ideling)
              (struct-copy entity player [dx dx] [dy dy] [state 'moving]))]))
 
-(define (player-update player entities items input)
+(define (player-update player entities items input fov-map)
   (cond [(player-using-item? player)  ; Handle item usage
          (define item-idx (input-key-c->item-idx (key-c (game-input-key input))))
          ;(log-debug "Use item at inventory location: ~v" item-idx)
-         (values (entity-use-item player item-idx) entities items)]
+         (define item (inventory-get (component-get player 'inventory) item-idx))
+         (cond [(not (item-needs-target? item))
+                (values (entity-use-item player item-idx) entities items)]
+               [else
+                (define-values (target new-entities)
+                  (find-closest-entity player entities (item-range item) fov-map))
+                (define-values (new-player new-target)
+                  (entity-target-item player target item-idx))
+                (values (entity-set-state new-player 'ideling)
+                        (if (null? new-target)
+                            new-entities
+                            (cons new-target new-entities))
+                        items)])]
 
         ; If player is viewing inventory don't update
         [(player-viewing-inventory? player) (values player entities items)]
@@ -124,7 +154,6 @@
                                 (if (equal? enty (fighter-target player-fighter))
                                     attacked-entity
                                     enty)))
-         ; TODO: Here's a lot of struct copying going on
          (define new-player-fighter
            (struct-copy fighter player-fighter
                         [target (if (entity-dead? attacked-entity)
