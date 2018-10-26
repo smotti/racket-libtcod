@@ -20,12 +20,8 @@
          "map.rkt"
          "message-log.rkt"
          "types.rkt"
+         "utils.rkt"
          )
-
-(define (distance-to from to)
-  (define dx (- (entity-x to) (entity-x from)))
-  (define dy (- (entity-y to) (entity-y from)))
-  (sqrt (+ (sqr dx) (sqr dy))))
 
 (define (move-towards an-entity x y a-map entities)
   ; vector from obj to target and distance

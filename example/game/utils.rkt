@@ -1,8 +1,17 @@
 #lang racket
 
-(provide input-move-deltas)
+(provide distance-to
+         input-move-deltas
+         )
 
-(require "../../console.rkt")
+(require "../../console.rkt"
+
+         "types.rkt")
+
+(define (distance-to from to)
+  (define dx (- (entity-x to) (entity-x from)))
+  (define dy (- (entity-y to) (entity-y from)))
+  (sqrt (+ (sqr dx) (sqr dy))))
 
 (define (input-move-deltas a-key)
   (cond [(eq? a-key 'UP) (values 0 -1)]
