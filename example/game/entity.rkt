@@ -69,11 +69,12 @@
         [else
          (define new-target
            (item-use (inventory-get entity-inventory item-idx) a-target))
-         (define new-player
-           (component-update an-entity
-                             'inventory
-                             (inventory-remove entity-inventory item-idx)))
-         (values new-player new-target)]))
+         (if (null? new-target)
+             (values an-entity a-target)
+             (values (component-update an-entity
+                                       'inventory
+                                       (inventory-remove entity-inventory item-idx))
+                     new-target))]))
 
 (define (entity-use-item an-entity item-idx)
   (define entity-inventory (component-get an-entity 'inventory))

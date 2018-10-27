@@ -130,8 +130,7 @@
                                      [player new-player])))]))
 
   (define current-entities
-    (filter-map (lambda (enty) (and (not (null? enty))
-                                    (entity-alive? enty)
+    (filter-map (lambda (enty) (and (entity-alive? enty)
                                     (~> enty
                                         (component-get 'ai)
                                         ai-reset-turn-taken
@@ -139,8 +138,7 @@
                 (game-state-entities state)))
   (define dead-entities
     (append (game-state-dead state)
-            (filter (lambda (enty) (and (not (null? enty))
-                                        (entity-dead? enty)))
+            (filter (lambda (enty) (entity-dead? enty))
                     (game-state-entities state))))
   (if (or (not (eq? 'turn (game-state-action state)))
           (null? current-entities))
@@ -285,7 +283,7 @@
   ;(log-debug "Render items")
   ;(log-debug "~v" (game-state-items state))
   (hash-for-each (game-state-items state)
-                 (lambda (_ enty) (when enty (render-entity enty fov-map))))
+                 (lambda (_ enty) (render-entity enty fov-map)))
 
   ;(log-debug "Render dead entites")
   ;(log-debug "~v" (game-state-dead state))
